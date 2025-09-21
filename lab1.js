@@ -1,9 +1,12 @@
 // lab1.js
+
 var Lab1 = {
   currentMatrix: [],
-  variables: [],
-  outputs: [],
-  history: []
+  variables: [],     // ['-X1', '-X2', ...] — внутреннее хранение
+  outputs: [],       // ['-Y1', '-Y2', ...]
+  history: [],
+  pivotRow: undefined,
+  pivotCol: undefined
 };
 
 function lab1Template() {
@@ -27,10 +30,6 @@ function lab1Template() {
     <div id="steps"></div>
 
     <div class="controls" style="margin-top: 20px;">
-      <label>Разрешающий элемент: строка </label>
-      <input type="number" id="pivot-row" min="1" value="2"> 
-      <label>, столбец </label>
-      <input type="number" id="pivot-col" min="1" value="3">
       <button class="action" onclick="Lab1.performStep()">Выполнить шаг</button>
       <button class="action" onclick="Lab1.reset()">Сбросить</button>
     </div>
@@ -44,7 +43,7 @@ Lab1.setupMatrix = function() {
   let html = '<h3>Заполните матрицу коэффициентов</h3><table border="1" cellpadding="5" cellspacing="0">';
   html += '<tr><th></th>';
   for (let j = 0; j < n; j++) {
-    html += `<th>X<sub>${j + 1}</sub></th>`;
+    html += `<th>-X<sub>${j + 1}</sub></th>`;
   }
   html += '</tr>';
 
@@ -77,8 +76,8 @@ Lab1.loadMatrix = function() {
   const n = parseInt(document.getElementById("cols").value) || 3;
 
   Lab1.currentMatrix = [];
-  Lab1.variables = Array.from({ length: n }, (_, i) => `X${i + 1}`);
-  Lab1.outputs = Array.from({ length: m }, (_, i) => `Y${i + 1}`);
+  Lab1.variables = Array.from({ length: n }, (_, i) => `-X${i + 1}`);  // внутрь: -X1, -X2...
+  Lab1.outputs = Array.from({ length: m }, (_, i) => `-Y${i + 1}`);     // внутрь: -Y1, -Y2...
 
   for (let i = 0; i < m; i++) {
     const row = [];
@@ -94,39 +93,81 @@ Lab1.loadMatrix = function() {
   Lab1.logStep("Исходная таблица создана.");
 };
 
-Lab1.renderTable = function() {
-  const tableEl = document.getElementById("jordan-table");
-  let html = '<h3>Жорданова таблица</h3><table border="1" cellpadding="5" cellspacing="0">';
-  html += '<tr><th></th>';
-  Lab1.variables.forEach(v => {
-    html += `<th>${v}</th>`;
-  });
-  html += '</tr>';
-
-  Lab1.currentMatrix.forEach((row, i) => {
-    html += `<tr><td>${Lab1.outputs[i]}</td>`;
-    row.forEach(cell => {
-      html += `<td>${Lab1.formatNumber(cell)}</td>`;
-    });
-    html += '</tr>';
-  });
-  html += '</table>';
-  tableEl.innerHTML = html;
-};
-
 Lab1.formatNumber = function(num) {
   if (Math.abs(num) < 1e-12) return "0";
   const rounded = Math.round(num * 1000) / 1000;
   return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(3);
 };
 
-Lab1.logStep = function(text) {
-  const stepsEl = document.getElementById("steps");
-  const div = document.createElement("div");
-  div.className = "step-info";
-  div.textContent = text;
-  stepsEl.appendChild(div);
-  stepsEl.scrollTop = stepsEl.scrollHeight;
+// Форматирование переменных для отображения: "-X1" → "+X1"
+Lab1.formatVariable = function(varName) {
+  return '-' + varName.substring(1); // удаляем минус, добавляем плюс
+};
+
+// Форматирование выходов: "-Y1" → "+Y1"
+Lab1.getOutputLabel = function(index) {
+  return '' + Lab1.outputs[index].substring(1);
+};
+
+Lab1.renderTable = function() {
+  const tableEl = document.getElementById("jordan-table");
+  let html = '<h3>Жорданова таблица</h3><table border="1" cellpadding="5" cellspacing="0">';
+  html += '<tr><th></th>';
+  // Заголовки столбцов: +X1, +X2, +Y1...
+  Lab1.variables.forEach(v => {
+    html += `<th>${Lab1.formatVariable(v)}</th>`;
+  });
+  html += '</tr>';
+
+  // Строки
+  Lab1.currentMatrix.forEach((row, i) => {
+    html += `<tr><td>${Lab1.getOutputLabel(i)}</td>`; // +Y1, +Y2...
+    row.forEach((cell, j) => {
+      const isPivot = (Lab1.pivotRow === i && Lab1.pivotCol === j);
+      const cellClass = isPivot ? 'pivot-cell' : '';
+      html += `<td class="${cellClass}" data-row="${i}" data-col="${j}" onclick="Lab1.selectPivot(${i}, ${j})">${Lab1.formatNumber(cell)}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+  tableEl.innerHTML = html;
+
+  // Стиль для разрешающего элемента
+  let style = document.getElementById('pivot-style');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'pivot-style';
+    style.textContent = `
+      .pivot-cell { 
+        background-color: #ffeb3b; 
+        font-weight: bold; 
+        cursor: pointer; 
+      }
+      td {
+        text-align: center;
+        width: 70px;
+        cursor: pointer;
+      }
+      td:hover {
+        background-color: #f0f0f0;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+};
+
+Lab1.selectPivot = function(row, col) {
+  const value = Lab1.currentMatrix[row][col];
+  if (Math.abs(value) < 1e-10) {
+    alert("Разрешающий элемент не может быть нулём!");
+    return;
+  }
+
+  Lab1.pivotRow = row;
+  Lab1.pivotCol = col;
+
+  Lab1.renderTable();
+  Lab1.logStep(`Выбран разрешающий элемент a[${row+1},${col+1}] = ${Lab1.formatNumber(value)}`);
 };
 
 Lab1.performStep = function() {
@@ -135,15 +176,15 @@ Lab1.performStep = function() {
     return;
   }
 
-  const r = parseInt(document.getElementById("pivot-row").value) - 1;
-  const s = parseInt(document.getElementById("pivot-col").value) - 1;
-  const rows = Lab1.currentMatrix.length;
-  const cols = Lab1.currentMatrix[0].length;
-
-  if (r < 0 || r >= rows || s < 0 || s >= cols) {
-    alert("Неверные индексы!");
+  if (Lab1.pivotRow === undefined || Lab1.pivotCol === undefined) {
+    alert("Выберите разрешающий элемент, кликнув по ячейке!");
     return;
   }
+
+  const r = Lab1.pivotRow;
+  const s = Lab1.pivotCol;
+  const rows = Lab1.currentMatrix.length;
+  const cols = Lab1.currentMatrix[0].length;
 
   const pivot = Lab1.currentMatrix[r][s];
   if (Math.abs(pivot) < 1e-10) {
@@ -155,10 +196,19 @@ Lab1.performStep = function() {
 
   const newMatrix = Array.from({ length: rows }, () => Array(cols).fill(0));
 
-  for (let j = 0; j < cols; j++) newMatrix[r][j] = Lab1.currentMatrix[r][j] / pivot;
-  for (let i = 0; i < rows; i++) {
-    if (i !== r) newMatrix[i][s] = -Lab1.currentMatrix[i][s] / pivot;
+  // Новая строка: делим на разрешающий элемент
+  for (let j = 0; j < cols; j++) {
+    newMatrix[r][j] = Lab1.currentMatrix[r][j] / pivot;
   }
+
+  // Новый столбец: -(старый столбец) / pivot
+  for (let i = 0; i < rows; i++) {
+    if (i !== r) {
+      newMatrix[i][s] = -Lab1.currentMatrix[i][s] / pivot;
+    }
+  }
+
+  // Остальные элементы
   for (let i = 0; i < rows; i++) {
     for (let j = 0; j < cols; j++) {
       if (i !== r && j !== s) {
@@ -166,16 +216,32 @@ Lab1.performStep = function() {
       }
     }
   }
+
+  // Разрешающий элемент становится обратным
   newMatrix[r][s] = 1 / pivot;
 
-  const oldVar = Lab1.variables[s];
-  const oldOut = Lab1.outputs[r];
-  Lab1.variables[s] = oldOut;
-  Lab1.outputs[r] = oldVar;
+  // Меняем местами переменные
+  const oldVar = Lab1.variables[s];  // например: "-X2"
+  const oldOut = Lab1.outputs[r];    // например: "-Y1"
 
+  Lab1.variables[s] = oldOut;         // теперь "-X2" → "-Y1"
+  Lab1.outputs[r] = oldVar;           // теперь "-Y1" → "-X2"
+
+  // Обновляем состояние
   Lab1.currentMatrix = newMatrix;
+  Lab1.pivotRow = undefined;
+  Lab1.pivotCol = undefined;
   Lab1.renderTable();
   Lab1.logStep(`Переменная ${oldVar} заменена на ${Lab1.outputs[r]}`);
+};
+
+Lab1.logStep = function(text) {
+  const stepsEl = document.getElementById("steps");
+  const div = document.createElement("div");
+  div.className = "step-info";
+  div.textContent = text;
+  stepsEl.appendChild(div);
+  stepsEl.scrollTop = stepsEl.scrollHeight;
 };
 
 Lab1.reset = function() {
@@ -185,9 +251,11 @@ Lab1.reset = function() {
   Lab1.currentMatrix = [];
   Lab1.variables = [];
   Lab1.outputs = [];
+  Lab1.pivotRow = undefined;
+  Lab1.pivotCol = undefined;
 };
 
 // initLab1 — для совместимости
 function initLab1() {
-  // можно оставить пустым или вызвать что-то по умолчанию
+  // можно оставить пустым
 }
