@@ -1,0 +1,119 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  margin: 0;
+  padding: 20px;
+  background-color: #f7f9fc;
+  color: #333;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+header h1 {
+  color: #2c3e50;
+}
+
+.labs-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.labs-menu button {
+  padding: 12px 20px;
+  font-size: 16px;
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.labs-menu button:hover {
+  background-color: #2980b9;
+}
+
+#lab-container {
+  max-width: 900px;
+  margin: 0 auto;
+  background: white;
+  padding: 25px;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 15px 0;
+  justify-content: center;
+}
+
+.controls .action {
+  background-color: #27ae60;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  margin: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.controls .action:hover {
+  background-color: #219a52;
+}
+
+th, td {
+  border: 1px solid #ccc;
+  padding: 10px;
+  text-align: center;
+}
+
+th {
+  background-color: #ecf0f1;
+  font-weight: bold;
+}
+
+.selected {
+  background-color: #ffeb3b;
+  border: 2px solid #f44336;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.example-panel {
+  margin: 20px 0;
+  text-align: center;
+}
+
+.example-panel button {
+  background-color: #e0e0e0;
+  border: 1px solid #ccc;
+  padding: 8px 12px;
+  margin: 5px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.example-panel button:hover {
+  background-color: #d0d0d0;
+}
+
+.step-info {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f0f8ff;
+  border-left: 4px solid #3498db;
+  font-size: 14px;
+  border-radius: 4px;
+}

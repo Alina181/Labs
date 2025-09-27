@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Лабораторные работы</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>Лабораторные работы</h1>
+  </header>
+
+  <main>
+    <nav class="labs-menu">
+      <button onclick="openLab(1)">Лаба 1: Модифицированные жордановы исключения</button>
+      <button onclick="openLab(2)">Лаба 2: Решение линейных уравнений систем</button>
+      <button onclick="openLab(3)">Лаба 3: </button>
+      <button onclick="openLab(4)">Лаба 4: </button>
+    </nav>
+
+    <div id="lab-container"></div>
+  </main>
+
+  <script src="lab1.js"></script>
+  <script src="lab2.js"></script>
+  <script src="lab3.js"></script>
+  <script src="lab4.js"></script>
+
+  <script>
+    function openLab(num) {
+      const container = document.getElementById('lab-container');
+      container.innerHTML = '';
+
+      if (num === 1) {
+        container.innerHTML = lab1Template();
+        initLab1();
+      } else if (num === 2) {
+        container.innerHTML = lab2Template();
+        initLab2();
+      } else if (num === 3) {
+        container.innerHTML = '<h2>Лабораторная 3</h2><p>В разработке...</p>';
+      } else if (num === 4) {
+        container.innerHTML = '<h2>Лабораторная 4</h2><p>В разработке...</p>';
+      }
+    }
+
+    window.onload = () => openLab(1);
+  </script>
+
+</body>
+</html>
