@@ -1,483 +1,370 @@
 var Lab2 = {
   matrix: [],
-  variables: [],  
-  outputs: [],     
-  selectedRow: null,
-  selectedCol: null
+  basis: [],
+  activeCols: [],
+  m: 0,
+  n: 0,
+  editing: true
 };
 
 function lab2Template() {
   return `
-    <h2>Лабораторная 2: Метод Жордановых исключений</h2>
-    <p><strong>Пример:</strong> Система:
-      x₁ + 2x₂ + x₃ = 4
-      x₁ + x₂ + x₄ = 6
-      x₁ - x₂ - 2x₃ + 3x₄ = 10
-    </p>
-
-    <div class="input-group">
-      <label>Количество строк (m):</label>
-      <input type="number" id="rows2" value="3" min="1" max="10">
-      <label>Количество столбцов (n):</label>
-      <input type="number" id="cols2" value="5" min="2" max="11">
-      <button class="action" onclick="Lab2.setupMatrix()">Создать матрицу</button>
+    <h2>Лабораторная 2: Метод Жордана (решение СЛАУ)</h2>
+    
+    <div class="input-group" style="margin-bottom:15px;">
+      <label>m (строки):</label>
+      <input type="number" id="lab2-rows" value="3" min="1" max="10" style="width:60px;">
+      
+      <label>n (столбцы):</label>
+      <input type="number" id="lab2-cols" value="3" min="1" max="10" style="width:60px;">
+      
+      <button class="action" onclick="Lab2.createTableInputs()">Создать таблицу</button>
     </div>
 
-    <div id="matrix-input2"></div>
-    <div id="jordan-table2"></div>
-    <div id="steps2"></div>
-    <div id="system-analysis2" style="margin-top: 20px; padding: 10px; background-color: #f5f5f5; border-radius: 5px;"></div>
-    <div id="final-answer2" style="margin-top: 20px; padding: 10px; background-color: #e8f5e8; border-radius: 5px; border: 1px solid #4caf50;"></div>
-
-    <div class="controls" style="margin-top: 20px;">
-      <label>Выберите разрешающий элемент (ненулевой):</label>
-      <button class="action" onclick="Lab2.clearSelection()">Очистить</button>
-      <button class="action" onclick="Lab2.performStep()">Выполнить шаг</button>
-      <button class="action" onclick="Lab2.showFinalAnswer()">Показать ответ</button>
-      <button class="action" onclick="Lab2.reset()">Начать заново</button>
+    <div class="input-group" style="margin-bottom:15px;">
+      <label>Выберите пример:</label>
+      <select id="lab2-example-select">
+        <option value="0">— Не выбран —</option>
+        <option value="1">Пример 1</option>
+        <option value="2">Пример 2</option>
+        <option value="3">Пример 3</option>
+        <option value="4">Пример 4</option>
+        <option value="5">Пример 5</option>
+      </select>
+      <button class="action" onclick="Lab2.loadExample()">Загрузить пример</button>
     </div>
 
-    <div class="example-panel">
-      <h3>Примеры</h3>
-      <button onclick="Lab2.loadExample(1)">Пример 1</button>
-      <button onclick="Lab2.loadExample(2)">Пример 2</button>
-      <button onclick="Lab2.loadExample(3)">Пример 3</button>
+    <button class="action" onclick="Lab2.startSteps()" style="margin:10px 0;">Начать решение</button>
+
+    <div id="lab2-table-container" style="margin-top:15px;"></div>
+    <div id="lab2-message" style="margin-top:10px; font-size:14px; color:#333; white-space: pre-line;">
+      Задайте систему вручную или выберите пример.
     </div>
   `;
 }
 
-Lab2.setupMatrix = function() {
-  const m = parseInt(document.getElementById("rows2").value) || 3;
-  let n = parseInt(document.getElementById("cols2").value) || 5;
+Lab2.isZero = function(x, eps = 1e-9) {
+  return Math.abs(x) < eps;
+};
 
-  if (n < 2) n = 2;
+Lab2.roundVal = function(x, d = 3) {
+  if (Lab2.isZero(x)) return 0;
+  return parseFloat(x.toFixed(d));
+};
 
-  let html = '<h3>Заполните матрицу коэффициентов</h3><table border="1" cellpadding="5" cellspacing="0">';
-  html += '<tr><th></th><th>1</th>';
-  for (let j = 1; j < n; j++) {
-    html += `<th>-X<sub>${j}</sub></th>`;
+Lab2.createTableInputs = function() {
+  const rowsInput = document.getElementById('lab2-rows');
+  const colsInput = document.getElementById('lab2-cols');
+
+  let m, n;
+  try {
+    m = parseInt(rowsInput.value);
+    n = parseInt(colsInput.value);
+    if (isNaN(m) || isNaN(n) || m <= 0 || n <= 0) throw new Error();
+  } catch (e) {
+    Lab2.showMessage("Ошибка: m и n должны быть положительными числами.");
+    return;
   }
-  html += '</tr>';
 
+  Lab2.m = m;
+  Lab2.n = n;
+
+  const container = document.getElementById('lab2-table-container');
+  let html = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">';
+  
+  // Заголовки
+  html += '<tr><th></th>';
+  for (let j = 0; j < n; j++) {
+    html += `<th>x${j + 1}</th>`;
+  }
+  html += '<th>Св.член</th></tr>';
+
+  // Строки ввода
   for (let i = 0; i < m; i++) {
-    html += `<tr><td>0=</td>`;
-    for (let j = 0; j < n; j++) {
-      const val = Lab2.getDefault(i, j);
-      html += `<td><input type="number" id="cell2-${i}-${j}" value="${val}" step="any" style="width:60px;"></td>`;
+    html += '<tr>';
+    html += `<td style="background:#f0f0f0;">Ур.${i + 1}</td>`;
+    for (let j = 0; j < n + 1; j++) {
+      const val = 0;
+      html += `<td><input type="number" step="any" id="lab2-cell-${i}-${j}" value="${val}" style="width:60px; text-align:center;"></td>`;
     }
     html += '</tr>';
   }
+
   html += '</table>';
-  html += '<button class="action" onclick="Lab2.loadMatrix()">Загрузить</button>';
-
-  document.getElementById("matrix-input2").innerHTML = html;
-  document.getElementById("jordan-table2").innerHTML = '';
-  document.getElementById("steps2").innerHTML = '';
-  document.getElementById("system-analysis2").innerHTML = '';
-  document.getElementById("final-answer2").innerHTML = '';
+  container.innerHTML = html;
+  Lab2.showMessage("Введите коэффициенты и нажмите 'Начать решение'.");
 };
 
-Lab2.getDefault = function(i, j) {
-  const example = [
-    [4, 1, 2, 1, 0],
-    [6, 1, 1, 0, 1],
-    [10, 1, -1, -2, 3]
-  ];
-  return example[i]?.[j] ?? 0;
-};
+Lab2.startSteps = function() {
+  if (Lab2.editing && Lab2.matrix.length === 0) {
+    Lab2.showMessage("Сначала создайте таблицу или загрузите пример!");
+    return;
+  }
 
-Lab2.loadMatrix = function() {
-  const m = parseInt(document.getElementById("rows2").value) || 3;
-  let n = parseInt(document.getElementById("cols2").value) || 5;
-
-  if (n < 2) n = 2;
-
-  Lab2.matrix = [];
-  Lab2.variables = Array.from({ length: n - 1 }, (_, i) => `X<sub>${i + 1}</sub>`);
-  Lab2.outputs = Array.from({ length: m }, () => '0=');
-
-  for (let i = 0; i < m; i++) {
-    const row = [];
-    for (let j = 0; j < n; j++) {
-      const inputElement = document.getElementById(`cell2-${i}-${j}`);
-      let val = 0;
-      if (inputElement) {
-        val = parseFloat(inputElement.value);
+  if (Lab2.editing) {
+    Lab2.matrix = [];
+    for (let i = 0; i < Lab2.m; i++) {
+      const row = [];
+      for (let j = 0; j < Lab2.n + 1; j++) {
+        const el = document.getElementById(`lab2-cell-${i}-${j}`);
+        let val = parseFloat(el?.value);
         if (isNaN(val)) val = 0;
+        row.push(val);
       }
-      row.push(val);
-    }
-    Lab2.matrix.push(row);
-  }
-
-  // Удаление нулевых столбцов 
-  const colsToKeep = [0]; 
-
-  for (let j = 1; j < n; j++) {
-    const isNonZero = Lab2.matrix.some(row => Math.abs(row[j]) > 1e-10);
-    if (isNonZero) {
-      colsToKeep.push(j);
+      Lab2.matrix.push(row);
     }
   }
 
-  const newMatrix = Lab2.matrix.map(row =>
-    colsToKeep.map(idx => row[idx])
-  );
+  Lab2.basis = Array(Lab2.m).fill("0");
+  Lab2.activeCols = Array.from({ length: Lab2.n }, (_, i) => i);
+  Lab2.editing = false;
 
-  const newVariables = colsToKeep.slice(1).map(j => `X<sub>${j}</sub>`);
-
-  Lab2.matrix = newMatrix;
-  Lab2.variables = newVariables;
-  Lab2.selectedRow = null;
-  Lab2.selectedCol = null;
-
-  Lab2.renderTable();
-  Lab2.analyzeSystem();
-  Lab2.logStep("Исходная таблица создана.");
+  Lab2.renderMatrix();
+  Lab2.showMessage("Выбирайте ведущий элемент.");
 };
 
-Lab2.renderTable = function() {
-  const tableEl = document.getElementById("jordan-table2");
-  if (!Lab2.matrix.length || !Lab2.matrix[0]) {
-    tableEl.innerHTML = '';
+Lab2.getExample = function(id) {
+  switch (id) {
+    case 1:
+      // 3 уравнения, 3 переменные, единственное решение
+      return {
+        m: 3,
+        n: 4,
+        matrix: [
+          [ 1, 2, 1, 0, 4],
+          [ 1, 1, 0, 1, 6],
+          [ 1, -1, -1, 3, 10]
+        ]
+      };
+    case 2:
+      // 2 уравнения, 3 переменные, бесконечно много решений
+      return {
+        m: 3,
+        n: 3,
+        matrix: [
+        [1, 3, 0, 14],
+        [2, 0, -3, 7],
+        [0, 2, 1, 7]
+        ]
+      };
+    case 3:
+      // 2 уравнения, 2 переменные, несовместна
+      return {
+        m: 3,
+        n: 3,
+        matrix: [
+        [1, 3, -4, 5],
+        [-1, 1, 1, 0],
+        [2, 1, 1, 9]
+        ]
+      };
+    case 4:
+      // Другая система 3×3 с единственным решением
+      return {
+        m: 3,
+        n: 5,
+        matrix: [
+        [-2, 1, 1, 0, 0, 2],
+        [-1, 2, 0, -1, 0, 8],
+        [1, 1, 0, 0, 1, 5]
+        ]
+      };
+    case 5:
+      // 2 уравнения, 4 переменные, 2 свободные
+      return {
+        m: 2,
+        n: 4,
+        matrix: [
+          [1, 1, 1, 4, 1],
+          [-1, 0, 1, 2, 1]
+        ]
+      };
+    default:
+      return null;
+  }
+};
+
+Lab2.loadExample = function() {
+  const select = document.getElementById('lab2-example-select');
+  const id = parseInt(select.value);
+  if (id === 0) {
+    Lab2.showMessage("Выберите пример из списка.");
     return;
   }
 
-  let html = '<h3>Таблица Жордана</h3><table border="1" cellpadding="5" cellspacing="0">';
-  html += '<tr><th></th><th>1</th>';
-  Lab2.variables.forEach(v => {
-    html += `<th>-${v}</th>`;
+  const ex = Lab2.getExample(id);
+  if (!ex) {
+    Lab2.showMessage("Пример не найден.");
+    return;
+  }
+
+  Lab2.m = ex.m;
+  Lab2.n = ex.n;
+  Lab2.matrix = ex.matrix.map(row => [...row]);
+
+  // Обновляем поля ввода
+  document.getElementById('lab2-rows').value = Lab2.m;
+  document.getElementById('lab2-cols').value = Lab2.n;
+  Lab2.createTableInputs();
+
+  // Заполняем значения
+  for (let i = 0; i < Lab2.m; i++) {
+    for (let j = 0; j < Lab2.n + 1; j++) {
+      const el = document.getElementById(`lab2-cell-${i}-${j}`);
+      if (el) el.value = Lab2.matrix[i][j];
+    }
+  }
+
+  Lab2.showMessage("Пример загружен. Нажмите 'Начать решение' для старта.");
+};
+
+Lab2.renderMatrix = function() {
+  const container = document.getElementById('lab2-table-container');
+  let html = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">';
+
+  html += '<tr><th>Базис</th><th>Св.член</th>';
+  Lab2.activeCols.forEach(j => {
+    html += `<th>-x${j + 1}</th>`;
   });
   html += '</tr>';
 
-  Lab2.matrix.forEach((row, i) => {
-    html += `<tr><td>${Lab2.outputs[i]}</td><td>${Lab2.formatNumber(row[0])}</td>`;
-    for (let j = 1; j < row.length; j++) {
-      const isPivot = Lab2.selectedRow === i && Lab2.selectedCol === j;
-      const cellClass = isPivot ? 'selected' : '';
-      html += `<td class="${cellClass}" onclick="Lab2.selectCell(${i}, ${j})">${Lab2.formatNumber(row[j])}</td>`;
-    }
+  for (let i = 0; i < Lab2.m; i++) {
+    html += '<tr>';
+    html += `<td style="background:#f9f9f9; font-weight:bold;">${Lab2.basis[i]}</td>`;
+    html += `<td>${Lab2.roundVal(Lab2.matrix[i][Lab2.n])}</td>`;
+    Lab2.activeCols.forEach(j => {
+      const val = Lab2.matrix[i][j];
+      if (Lab2.isZero(val)) {
+        html += `<td style="background:#e0e0e0; color:#888;">0</td>`;
+      } else {
+        html += `<td style="background:#d0f0ff; cursor:pointer;" onclick="Lab2.choosePivot(${i}, ${j})">${Lab2.roundVal(val)}</td>`;
+      }
+    });
     html += '</tr>';
-  });
+  }
+
   html += '</table>';
-  tableEl.innerHTML = html;
+  container.innerHTML = html;
 };
 
-Lab2.formatNumber = function(num) {
-  if (Math.abs(num) < 1e-12) return "0";
-  const rounded = Math.round(num * 1000) / 1000;
-  return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(3);
-};
-
-Lab2.logStep = function(text) {
-  const stepsEl = document.getElementById("steps2");
-  const div = document.createElement("div");
-  div.className = "step-info";
-  div.innerHTML = text;
-  stepsEl.appendChild(div);
-  stepsEl.scrollTop = stepsEl.scrollHeight;
-};
-
-Lab2.selectCell = function(row, col) {
-  if (col === 0) {
-    alert("Нельзя выбирать первый столбец (свободный член)");
+Lab2.choosePivot = function(r, c) {
+  if (Lab2.editing || !Lab2.activeCols.includes(c) || Lab2.isZero(Lab2.matrix[r][c])) {
     return;
   }
 
-  if (Math.abs(Lab2.matrix[row][col]) < 1e-10) {
-    alert("Разрешающий элемент не может быть нулём!");
-    return;
+  const pivot = Lab2.matrix[r][c];
+
+  // Нормализация строки
+  for (let j = 0; j < Lab2.n + 1; j++) {
+    Lab2.matrix[r][j] /= pivot;
   }
 
-  Lab2.selectedRow = row;
-  Lab2.selectedCol = col;
-  Lab2.renderTable();
-  Lab2.logStep(`Выбран разрешающий элемент a[${row+1},${col}] = ${Lab2.formatNumber(Lab2.matrix[row][col])}`);
+  // Обнуление других строк
+  for (let i = 0; i < Lab2.m; i++) {
+    if (i === r) continue;
+    const factor = Lab2.matrix[i][c];
+    if (Lab2.isZero(factor)) continue;
+    for (let j = 0; j < Lab2.n + 1; j++) {
+      Lab2.matrix[i][j] -= factor * Lab2.matrix[r][j];
+    }
+  }
+
+  Lab2.basis[r] = `x${c + 1}`;
+  Lab2.activeCols = Lab2.activeCols.filter(col => col !== c);
+
+  Lab2.renderMatrix();
+  Lab2.checkStatus();
 };
 
-Lab2.clearSelection = function() {
-  Lab2.selectedRow = null;
-  Lab2.selectedCol = null;
-  Lab2.renderTable();
-  Lab2.logStep("Выбор разрешающего элемента сброшен.");
-};
+Lab2.checkStatus = function() {
+  // Проверка на несовместность
+  let inconsistent = false;
+  for (let i = 0; i < Lab2.m; i++) {
+    let allZero = true;
+    for (let j = 0; j < Lab2.n; j++) {
+      if (!Lab2.isZero(Lab2.matrix[i][j])) {
+        allZero = false;
+        break;
+      }
+    }
+    if (allZero && !Lab2.isZero(Lab2.matrix[i][Lab2.n])) {
+      inconsistent = true;
+      break;
+    }
+  }
 
-Lab2.performStep = function() {
-  if (!Lab2.matrix.length) {
-    alert("Сначала загрузите матрицу!");
+  if (inconsistent) {
+    Lab2.showMessage("Система несовместна.");
+    Lab2.editing = true;
     return;
   }
 
-  if (Lab2.selectedRow === null || Lab2.selectedCol === null) {
-    alert("Выберите разрешающий элемент!");
-    return;
+  const usedBasis = new Set(Lab2.basis);
+  const freeCols = [];
+  for (let j = 0; j < Lab2.n; j++) {
+    if (!usedBasis.has(`x${j + 1}`)) {
+      freeCols.push(j);
+    }
   }
 
-  const r = Lab2.selectedRow;
-  const s = Lab2.selectedCol;
-  const pivot = Lab2.matrix[r][s];
+  if (freeCols.length > 0) {
+    const FREE_VARS = ["α", "β", "γ", "δ", "ε", "ζ", "η", "θ"];
+    const freeVars = freeCols.map((col, idx) => {
+      const symbol = idx < FREE_VARS.length ? FREE_VARS[idx] : `t${idx}`;
+      return { col, symbol };
+    });
 
-  if (Math.abs(pivot) < 1e-10) {
-    alert("Разрешающий элемент не может быть нулём!");
-    return;
-  }
+    const equations = [];
+    const usedLeads = new Set();
 
-  const rows = Lab2.matrix.length;
-  const cols = Lab2.matrix[0].length;
-
-  const newMatrix = Array.from({ length: rows }, () => Array(cols).fill(0));
-
-  for (let j = 0; j < cols; j++) {
-    newMatrix[r][j] = Lab2.matrix[r][j] / pivot;
-  }
-
-  for (let i = 0; i < rows; i++) {
-    if (i !== r) {
-      for (let j = 0; j < cols; j++) {
-        if (j === s) {
-          newMatrix[i][j] = -Lab2.matrix[i][j] / pivot;
-        } else {
-          newMatrix[i][j] = Lab2.matrix[i][j] - (Lab2.matrix[i][s] * Lab2.matrix[r][j]) / pivot;
+    for (let i = 0; i < Lab2.m; i++) {
+      let lead = -1;
+      for (let j = 0; j < Lab2.n; j++) {
+        if (Math.abs(Lab2.matrix[i][j] - 1) < 1e-9 && !freeCols.includes(j)) {
+          lead = j;
+          break;
         }
       }
+      if (lead >= 0 && !usedLeads.has(lead)) {
+        usedLeads.add(lead);
+        let expr = `${Lab2.roundVal(Lab2.matrix[i][Lab2.n])}`;
+        freeVars.forEach(({ col, symbol }) => {
+          const coef = -Lab2.matrix[i][col];
+          if (!Lab2.isZero(coef)) {
+            const sign = coef > 0 ? '+' : '';
+            expr += ` ${sign}${Lab2.roundVal(coef)}*${symbol}`;
+          }
+        });
+        equations.push(`x${lead + 1} = ${expr}`);
+      }
     }
-  }
 
-  for (let i = 0; i < rows; i++) {
-    newMatrix[i].splice(s, 1);
-  }
-
-  const removedVar = Lab2.variables[s - 1];
-  Lab2.variables.splice(s - 1, 1);
-  Lab2.outputs[r] = `${removedVar}=`;
-
-  Lab2.matrix = newMatrix;
-  Lab2.selectedRow = null;
-  Lab2.selectedCol = null;
-  Lab2.renderTable();
-  Lab2.analyzeSystem();
-  Lab2.logStep(`Столбец ${removedVar} удалён. Переменная ${removedVar} теперь базисная.`);
-};
-
-Lab2.analyzeSystem = function() {
-  const analysisEl = document.getElementById("system-analysis2");
-  if (!Lab2.matrix.length || !Lab2.matrix[0]) {
-    analysisEl.innerHTML = '';
+    const params = freeVars.map(({ col, symbol }) => `x${col + 1} = ${symbol}`);
+    const msg = "Система имеет бесконечно много решений:\n" + [...params, ...equations].join('\n');
+    Lab2.showMessage(msg);
     return;
   }
 
-  const rows = Lab2.matrix.length;
-  const cols = Lab2.matrix[0].length;
-  
-  let hasContradiction = false;
-  let hasFreeVariables = false;
-  let rank = 0;
-
-  // (0 = ненулевое число)
-  for (let i = 0; i < rows; i++) {
-    const freeTerm = Lab2.matrix[i][0];
-    const allCoefficientsZero = Lab2.matrix[i].slice(1).every(val => Math.abs(val) < 1e-10);
-    
-    if (Math.abs(freeTerm) > 1e-10 && allCoefficientsZero) {
-      hasContradiction = true;
-      break;
-    }
-    
-    // Ранг
-    const rowHasNonZero = Lab2.matrix[i].some((val, j) => j > 0 && Math.abs(val) > 1e-10);
-    if (rowHasNonZero || Math.abs(freeTerm) > 1e-10) {
-      rank++;
-    }
-  }
-
-  const basicVariables = Lab2.outputs.filter(output => output.includes('=') && !output.startsWith('0=')).length;
-  const totalVariables = cols - 1;
-  
-  if (totalVariables > basicVariables) {
-    hasFreeVariables = true;
-  }
-
-  let result = '';
-  if (hasContradiction) {
-    result = '<strong style="color: red;">Система НЕСОВМЕСТНА (не имеет решений)</strong>';
-  } else if (hasFreeVariables) {
-    result = '<strong style="color: blue;">Система СОВМЕСТНА и имеет БЕСКОНЕЧНО много решений</strong>';
-  } else {
-    result = '<strong style="color: green;">Система СОВМЕСТНА и имеет ЕДИНСТВЕННОЕ решение</strong>';
-  }
-
-  result += `Ранг системы: ${rank}`;
-  result += `Количество базисных переменных: ${basicVariables}`;
-  result += `Количество свободных переменных: ${totalVariables - basicVariables}`;
-
-  analysisEl.innerHTML = `<h3>Анализ системы:</h3>${result}`;
-};
-
-Lab2.showFinalAnswer = function() {
-  const answerEl = document.getElementById("final-answer2");
-  if (!Lab2.matrix.length || !Lab2.matrix[0]) {
-    answerEl.innerHTML = '<p style="color: red;">Сначала загрузите матрицу!</p>';
-    return;
-  }
-
-  const rows = Lab2.matrix.length;
-  const cols = Lab2.matrix[0].length;
-
-  for (let i = 0; i < rows; i++) {
-    const freeTerm = Lab2.matrix[i][0];
-    const allCoefficientsZero = Lab2.matrix[i].slice(1).every(val => Math.abs(val) < 1e-10);
-    
-    if (Math.abs(freeTerm) > 1e-10 && allCoefficientsZero) {
-      answerEl.innerHTML = `
-        <h3>Ответ:</h3>
-        <p style="color: red; font-size: 1.2em;"><strong>Система НЕСОВМЕСТНА</strong></p>
-        <p>Уравнение ${i+1}: 0 = ${Lab2.formatNumber(freeTerm)} - противоречие</p>
-      `;
-      return;
-    }
-  }
-
-  const basicVars = [];
-  const freeVars = [];
-  const equations = [];
-
-  for (let i = 0; i < rows; i++) {
-    if (Lab2.outputs[i].startsWith('X<sub>')) {
-      basicVars.push(Lab2.outputs[i].replace('=', ''));
-    }
-  }
-
-  for (let j = 0; j < Lab2.variables.length; j++) {
-    freeVars.push(Lab2.variables[j]);
-  }
-
-  for (let i = 0; i < rows; i++) {
-    if (Lab2.outputs[i].startsWith('X<sub>')) {
-      const varName = Lab2.outputs[i].replace('=', '');
-      let equation = `${varName} = ${Lab2.formatNumber(Lab2.matrix[i][0])}`;
-      
-      for (let j = 1; j < cols; j++) {
-        const coeff = Lab2.matrix[i][j];
-        if (Math.abs(coeff) > 1e-10) {
-          const sign = coeff > 0 ? ' + ' : ' - ';
-          const absCoeff = Math.abs(coeff);
-          const coeffStr = Math.abs(absCoeff - 1) < 1e-10 ? '' : Lab2.formatNumber(absCoeff);
-          equation += `${sign}${coeffStr}${Lab2.variables[j-1]}`;
-        }
-      }
-      equations.push(equation);
-    }
-  }
-
-  let answerHTML = '<h3>Ответ:</h3>';
-  
-  if (freeVars.length === 0) {
-    // Единственное решение
-    answerHTML += '<p style="color: green; font-size: 1.2em;"><strong>Система имеет единственное решение:</strong></p>';
-    equations.forEach(eq => {
-      answerHTML += `<p style="font-size: 1.1em; margin: 5px 0;">${eq}</p>`;
-    });
-  } else {
-    // Бесконечное число решений
-    answerHTML += '<p style="color: blue; font-size: 1.2em;"><strong>Система имеет бесконечное число решений:</strong></p>';
-    
-    // Выводим уравнения для базисных переменных
-    equations.forEach(eq => {
-      answerHTML += `<p style="font-size: 1.1em; margin: 5px 0;">${eq}</p>`;
-    });
-    
-    // Выводим свободные переменные как параметры
-    answerHTML += '<p style="margin-top: 10px;"><strong>Свободные переменные:</strong></p>';
-    freeVars.forEach((freeVar, index) => {
-      const param = String.fromCharCode(945 + index); // α, β, γ, ...
-      answerHTML += `<p style="font-size: 1.1em; margin: 5px 0;">${freeVar} = ${param}</p>`;
-    });
-    
-    // Добавляем обозначение для параметров
-    if (freeVars.length === 1) {
-      answerHTML += `<p style="margin-top: 10px;"><strong>где ${String.fromCharCode(945)} ∈ ℝ</strong></p>`;
-    } else {
-      const params = freeVars.map((_, index) => String.fromCharCode(945 + index)).join(', ');
-      answerHTML += `<p style="margin-top: 10px;"><strong>где (${params}) ∈ ℝ<sup>${freeVars.length}</sup></strong></p>`;
-    }
-  }
-
-  answerEl.innerHTML = answerHTML;
-};
-
-Lab2.reset = function() {
-  document.getElementById("matrix-input2").innerHTML = '';
-  document.getElementById("jordan-table2").innerHTML = '';
-  document.getElementById("steps2").innerHTML = '';
-  document.getElementById("system-analysis2").innerHTML = '';
-  document.getElementById("final-answer2").innerHTML = '';
-  Lab2.matrix = [];
-  Lab2.variables = [];
-  Lab2.outputs = [];
-  Lab2.selectedRow = null;
-  Lab2.selectedCol = null;
-};
-
-Lab2.loadExample = function(exampleNum) {
-  Lab2.reset();
-  
-  let matrix, variables, outputs;
-  
-  switch(exampleNum) {
-    case 1:
-      // Совместная система с единственным решением
-      matrix = [
-        [14, 1, 3, 0],
-        [7, 2, 0, -3],
-        [7, 0, 2, 1]
-      ];
-      variables = ['X<sub>1</sub>', 'X<sub>2</sub>', 'X<sub>3</sub>', 'X<sub>4</sub>'];
-      outputs = ['0=', '0=', '0=', '0='];
-      break;
-      
-    case 2:
-      // Несовместная система
-      matrix = [
-        [5, 1, 3, -4],
-        [0, -1, 1, 1],
-        [9, 2, 1, 1]
-      ];
-      variables = ['X<sub>1</sub>', 'X<sub>2</sub>', 'X<sub>3</sub>', 'X<sub>4</sub>'];
-      outputs = ['0=', '0=', '0=', '0='];
-      break;
-      
-    case 3:
-      matrix = [
-        [2, -2, 1, 1, 0, 0],
-        [8, -1, 2, 0, -1, 0],
-        [5, 1, 1, 0, 0, 1]
-      ];
-      variables = ['X<sub>1</sub>', 'X<sub>2</sub>', 'X<sub>3</sub>', 'X<sub>4</sub>', 'X<sub>5</sub>'];
-      outputs = ['0=', '0=', '0=', '0='];
-      break;
-      
-    default:
-      return;
-  }
-  
-  // Размеры
-  document.getElementById("rows2").value = matrix.length;
-  document.getElementById("cols2").value = matrix[0].length;
-  
-  Lab2.setupMatrix();
-  
-  for (let i = 0; i < matrix.length; i++) {
-    for (let j = 0; j < matrix[i].length; j++) {
-      const input = document.getElementById(`cell2-${i}-${j}`);
-      if (input) {
-        input.value = matrix[i][j];
+  // Единственное решение
+  const sol = Array(Lab2.n).fill(0);
+  for (let i = 0; i < Lab2.m; i++) {
+    for (let j = 0; j < Lab2.n; j++) {
+      if (Math.abs(Lab2.matrix[i][j] - 1) < 1e-9) {
+        sol[j] = Lab2.matrix[i][Lab2.n];
       }
     }
   }
-  
-  Lab2.loadMatrix();
+  const msg = "Единственное решение: " + sol.map((v, j) => `x${j + 1}=${Lab2.roundVal(v)}`).join(", ");
+  Lab2.showMessage(msg);
 };
 
-if (document.getElementById("rows2")) {
-  Lab2.setupMatrix();
+Lab2.showMessage = function(text) {
+  const el = document.getElementById('lab2-message');
+  if (el) {
+    el.textContent = text;
+  }
+};
+
+function initLab2() {
+  // Nothing special needed
 }

@@ -117,3 +117,29 @@ th {
   font-size: 14px;
   border-radius: 4px;
 }
+
+.lab3-input label {
+  display: block;
+  margin: 15px 0 5px;
+}
+
+.lab3-input input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.lab3-input button {
+  padding: 10px 20px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.lab3-input button:hover {
+  background: #45a049;
+}
