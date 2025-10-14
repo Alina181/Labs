@@ -4,111 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Лабораторные работы по линейному программированию</title>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    body {
-      font-family: Arial, sans-serif;
-      line-height: 1.6;
-      padding: 20px;
-      background-color: #f9f9f9;
-      color: #333;
-    }
-
-    header {
-      text-align: center;
-      margin-bottom: 30px;
-    }
-
-    header h1 {
-      color: #2c3e50;
-    }
-
-    .labs-menu {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-bottom: 30px;
-      justify-content: center;
-    }
-
-    .labs-menu button {
-      padding: 12px 20px;
-      font-size: 16px;
-      background-color: #3498db;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-
-    .labs-menu button:hover {
-      background-color: #2980b9;
-    }
-
-    #lab-container {
-      background: white;
-      padding: 25px;
-      border-radius: 8px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      max-width: 900px;
-      margin: 0 auto;
-    }
-
-    /* Стили для Лабы 3 */
-    .lab3-input label {
-      display: block;
-      margin: 15px 0 5px;
-      font-weight: bold;
-    }
-
-    .lab3-input input {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 16px;
-    }
-
-    .lab3-input button {
-      margin-top: 15px;
-      padding: 12px 24px;
-      background-color: #27ae60;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      font-size: 16px;
-      cursor: pointer;
-    }
-
-    .lab3-input button:hover {
-      background-color: #219653;
-    }
-
-    #lab3-result {
-      margin-top: 20px;
-      padding: 15px;
-      background-color: #f1f8e9;
-      border-left: 4px solid #7cb342;
-      font-family: monospace;
-      white-space: pre-wrap;
-      border-radius: 4px;
-    }
-
-    h2 {
-      margin-bottom: 15px;
-      color: #2c3e50;
-    }
-
-    p {
-      margin-bottom: 15px;
-    }
-  </style>
+  <!-- Подключаем внешний CSS -->
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -120,8 +17,8 @@
     <nav class="labs-menu">
       <button onclick="openLab(1)">Лаба 1: Модифицированные жордановы исключения</button>
       <button onclick="openLab(2)">Лаба 2: Решение систем линейных уравнений</button>
-      <button onclick="openLab(3)">Лаба 3: Симплекс-метод</button>
-      <button onclick="openLab(4)">Лаба 4: Двойственная задача</button>
+      <button onclick="openLab(3)">Лаба 3: Метод искусственного базиса</button>
+      <button onclick="openLab(4)">Лаба 4: </button>
     </nav>
 
     <div id="lab-container"></div>
@@ -157,16 +54,16 @@
           container.innerHTML = lab3Template();
           initLab3();
         } else {
-          container.innerHTML = '<h2>Лабораторная 3: Симплекс-метод</h2><p>Файл lab3.js не подключен или не реализован.</p>';
+          container.innerHTML = '<h2>Лабораторная 3: Метод искусственного базиса</h2><p>Файл lab3.js не подключен или не реализован.</p>';
         }
       } else if (num === 4) {
-        container.innerHTML = '<h2>Лабораторная 4: Двойственная задача</h2><p>В разработке...</p>';
+        container.innerHTML = '<h2>Лабораторная 4:</h2><p>В разработке...</p>';
       }
     }
 
     // Загружаем первую лабу по умолчанию
     window.onload = () => {
-      openLab(1); // или openLab(1), как вам удобно
+      openLab(1);
     };
   </script>
 
