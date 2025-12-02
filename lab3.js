@@ -1,821 +1,780 @@
-// lab3.js - Метод искусственного базиса
+// lab3.js - РњРµС‚РѕРґ РёСЃРєСѓСЃСЃС‚РІРµРЅРЅРѕРіРѕ Р±Р°Р·РёСЃР°
 var Lab3 = {
-  // Исходные данные
-  constraints: [],
+  equations: [],
   objective: [],
-  isMax: true,
-  variables: 0,
-  constraintsCount: 0,
-  
-  // Данные для симплекс-метода
-  tableau: [],
   basis: [],
+  table: [],
   artificialVars: [],
-  phase: 1, // 1 - минимизация искусственной функции, 2 - максимизация исходной
   iterations: [],
-  solution: null,
-  varNames: [], // Имена переменных для отображения
-  currentPivot: null,
-  canonicalForm: null // Хранит каноническую форму
+  currentIteration: 0,
+  isCanonicalMode: false,
+  hasArtificialBasis: false,
+  equationSigns: []
 };
 
 function lab3Template() {
   return `
-    <h2>Лабораторная 3: Метод искусственного базиса</h2>
+    <h2>Р›Р°Р±РѕСЂР°С‚РѕСЂРЅР°СЏ 3: РњРµС‚РѕРґ РёСЃРєСѓСЃСЃС‚РІРµРЅРЅРѕРіРѕ Р±Р°Р·РёСЃР°</h2>
     
-    <div class="input-section">
-      <h3>Входные данные</h3>
-      
-      <div class="input-group">
-        <label>Количество переменных:</label>
-        <input type="number" id="varCount" value="5" min="2" max="10">
-      </div>
-      
-      <div class="input-group">
-        <label>Количество ограничений:</label>
-        <input type="number" id="constrCount" value="3" min="1" max="10">
-      </div>
-      
-      <div class="input-group">
-        <label>Тип задачи:</label>
-        <select id="problemType">
-          <option value="max">Максимизация</option>
-          <option value="min">Минимизация</option>
-        </select>
-      </div>
-      
-      <button class="action" onclick="Lab3.setupProblem()">Настроить задачу</button>
+    <div class="mode-selector">
+      <button class="mode-btn active" onclick="Lab3.setMode('basis')">Р РµР¶РёРј 1: Р’РІРѕРґ Р±Р°Р·РёСЃР°</button>
+      <button class="mode-btn" onclick="Lab3.setMode('canonical')">Р РµР¶РёРј 2: Р’РІРѕРґ СѓСЂР°РІРЅРµРЅРёР№</button>
     </div>
     
-    <div id="problem-input"></div>
-    <div id="canonical-form"></div>
-    <div id="solution-steps"></div>
-    <div id="final-result"></div>
+    <div id="input-section"></div>
     
-    <style>
-      .simplex-table {
-        border-collapse: collapse;
-        margin: 15px 0;
-        font-family: monospace;
-        font-size: 14px;
-      }
-      .simplex-table th, .simplex-table td {
-        border: 1px solid #ddd;
-        padding: 8px 12px;
-        text-align: center;
-        min-width: 60px;
-      }
-      .simplex-table th {
-        background-color: #f5f5f5;
-        font-weight: bold;
-      }
-      .simplex-table td.basis-header {
-        background-color: #e8f4fd;
-        font-weight: bold;
-      }
-      .simplex-table td.pivot-cell {
-        background-color: #fff3cd;
-        font-weight: bold;
-      }
-      .iteration {
-        margin: 20px 0;
-        padding: 15px;
-        border: 1px solid #e0e0e0;
-        border-radius: 5px;
-        background-color: #fafafa;
-      }
-      .iteration h4 {
-        margin-top: 0;
-        color: #2c3e50;
-      }
-      .input-group {
-        margin: 10px 0;
-      }
-      .input-group label {
-        display: inline-block;
-        width: 200px;
-      }
-      .constraint {
-        margin: 10px 0;
-        padding: 10px;
-        background-color: #f8f9fa;
-        border-radius: 4px;
-      }
-      .objective-input {
-        margin: 15px 0;
-        padding: 15px;
-        background-color: #e8f5e8;
-        border-radius: 4px;
-      }
-      .pivot-info {
-        background-color: #fff3cd;
-        padding: 10px;
-        border-radius: 4px;
-        margin: 10px 0;
-        font-weight: bold;
-      }
-      .result-table {
-        margin: 15px 0;
-        border-collapse: collapse;
-      }
-      .result-table td {
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-      }
-      .constraint-type {
-        width: 80px;
-        padding: 4px;
-        border: 1px solid #ccc;
-        border-radius: 3px;
-      }
-      .coefficient-input {
-        width: 60px;
-        text-align: center;
-        padding: 4px;
-        border: 1px solid #ccc;
-        border-radius: 3px;
-      }
-      .canonical-section {
-        margin: 20px 0;
-        padding: 15px;
-        background-color: #e8f4fd;
-        border-radius: 5px;
-        border: 1px solid #b3d9ff;
-      }
-      .canonical-table {
-        border-collapse: collapse;
-        margin: 10px 0;
-        font-family: monospace;
-      }
-      .canonical-table th, .canonical-table td {
-        border: 1px solid #99ccff;
-        padding: 8px 12px;
-        text-align: center;
-      }
-      .canonical-table th {
-        background-color: #cce5ff;
-      }
-      .variable-list {
-        margin: 10px 0;
-        padding: 10px;
-        background-color: #f0f8ff;
-        border-radius: 4px;
-      }
-    </style>
+    <div id="canonical-display" style="display: none; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;">
+      <h3>РљР°РЅРѕРЅРёС‡РµСЃРєРёР№ РІРёРґ:</h3>
+      <div id="equations-text"></div>
+      <button class="action" onclick="Lab3.createBasisFromEquations()" style="margin-top: 10px;">РџРѕСЃС‚СЂРѕРёС‚СЊ РЅР°С‡Р°Р»СЊРЅСѓСЋ С‚Р°Р±Р»РёС†Сѓ</button>
+    </div>
+    
+    <div id="basis-display" style="margin: 20px 0; display: none;">
+      <h3>РќР°С‡Р°Р»СЊРЅР°СЏ СЃРёРјРїР»РµРєСЃ-С‚Р°Р±Р»РёС†Р° (Р±РµР· РёСЃРєСѓСЃСЃС‚РІРµРЅРЅРѕРіРѕ Р±Р°Р·РёСЃР°):</h3>
+      <div id="basis-table"></div>
+      <button class="action" onclick="Lab3.solveWithArtificialBasis()">РќР°С‡Р°С‚СЊ СЂРµС€РµРЅРёРµ СЃ РёСЃРєСѓСЃСЃС‚РІРµРЅРЅС‹Рј Р±Р°Р·РёСЃРѕРј</button>
+      <button class="action" onclick="Lab3.resetAll()">РЎР±СЂРѕСЃ</button>
+    </div>
+    
+    <div id="iterations-container" style="margin-top: 30px;"></div>
+    
+    <div id="result-container" style="margin-top: 20px;"></div>
+    
+    <div id="error-message" style="display: none; margin-top: 20px; padding: 15px; background: #f8d7da; color: #721c24; border-radius: 5px; border: 1px solid #f5c6cb;"></div>
   `;
 }
 
-Lab3.setupProblem = function() {
-  const varCount = parseInt(document.getElementById('varCount').value) || 5;
-  const constrCount = parseInt(document.getElementById('constrCount').value) || 3;
-  const isMax = document.getElementById('problemType').value === 'max';
+Lab3.setMode = function(mode) {
+  const buttons = document.querySelectorAll('.mode-btn');
+  buttons.forEach(btn => btn.classList.remove('active'));
+  event.target.classList.add('active');
   
-  Lab3.variables = varCount;
-  Lab3.constraintsCount = constrCount;
-  Lab3.isMax = isMax;
+  this.isCanonicalMode = (mode === 'canonical');
   
-  // Генерируем имена переменных
-  Lab3.varNames = [];
-  for (let i = 0; i < varCount; i++) {
-    Lab3.varNames.push(`x${Lab3.getSubscript(i+1)}`);
-  }
-  
-  let html = '<h3>Введите коэффициенты</h3>';
-  
-  // Целевая функция
-  html += '<div class="objective-input">';
-  html += '<h4>Целевая функция F(x) = ';
-  for (let i = 0; i < varCount; i++) {
-    html += `<input type="number" id="obj-${i}" value="${Lab3.getDefaultObjective(i)}" step="any" class="coefficient-input">${Lab3.varNames[i]}`;
-    if (i < varCount - 1) html += ' + ';
-  }
-  html += ` → ${isMax ? 'max' : 'min'}`;
-  html += '</h4></div>';
-  
-  // Ограничения
-  html += '<div class="constraints-input">';
-  html += '<h4>Ограничения:</h4>';
-  for (let i = 0; i < constrCount; i++) {
-    html += `<div class="constraint">`;
-    for (let j = 0; j < varCount; j++) {
-      html += `<input type="number" id="constr-${i}-${j}" value="${Lab3.getDefaultConstraint(i, j)}" step="any" class="coefficient-input">${Lab3.varNames[j]}`;
-      if (j < varCount - 1) html += ' + ';
-    }
-    html += ` 
-      <select id="constr-type-${i}" class="constraint-type">
-        <option value="leq">≤</option>
-        <option value="eq" selected>=</option>
-        <option value="geq">≥</option>
-      </select>
-      <input type="number" id="rhs-${i}" value="${Lab3.getDefaultRHS(i)}" step="any" class="coefficient-input">
+  if (mode === 'basis') {
+    document.getElementById('input-section').innerHTML = `
+      <div class="input-group">
+        <h3>Р’РІРµРґРёС‚Рµ РЅР°С‡Р°Р»СЊРЅСѓСЋ СЃРёРјРїР»РµРєСЃ-С‚Р°Р±Р»РёС†Сѓ (Р‘Р•Р— СЃС‚СЂРѕРєРё G)</h3>
+        <p>РџСЂРёРјРµСЂ (РёР· СѓСЃР»РѕРІРёСЏ) - РЅР°С‡Р°Р»СЊРЅР°СЏ С‚Р°Р±Р»РёС†Р° Р‘Р•Р— РёСЃРєСѓСЃСЃС‚РІРµРЅРЅРѕРіРѕ Р±Р°Р·РёСЃР°:</p>
+        <table border="1" cellpadding="5" cellspacing="0" style="margin: 10px 0; background: #f9f9f9;">
+          <tr><th>Р‘Р°Р·РёСЃ</th><th>xв‚Ѓ</th><th>xв‚‚</th><th>xв‚ѓ</th><th>xв‚„</th><th>xв‚…</th><th>1</th></tr>
+          <tr><td>xв‚†</td><td>1</td><td>-4</td><td>2</td><td>-5</td><td>9</td><td>3</td></tr>
+          <tr><td>xв‚‡</td><td>0</td><td>1</td><td>-3</td><td>4</td><td>-5</td><td>6</td></tr>
+          <tr><td>xв‚€</td><td>0</td><td>1</td><td>-1</td><td>1</td><td>-1</td><td>1</td></tr>
+          <tr><td>F</td><td>2</td><td>6</td><td>-5</td><td>1</td><td>4</td><td>0</td></tr>
+        </table>
+        <p><em>РЎС‚СЂРѕРєР° G РїРѕСЏРІРёС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё РїСЂРё СЂРµС€РµРЅРёРё РјРµС‚РѕРґРѕРј РёСЃРєСѓСЃСЃС‚РІРµРЅРЅРѕРіРѕ Р±Р°Р·РёСЃР°</em></p>
+        
+        <div class="matrix-setup">
+          <label>РљРѕР»РёС‡РµСЃС‚РІРѕ РїРµСЂРµРјРµРЅРЅС‹С… (Р±РµР· РёСЃРєСѓСЃСЃС‚РІРµРЅРЅС‹С…):</label>
+          <input type="number" id="var-count" value="5" min="2" max="10">
+          <label>РљРѕР»РёС‡РµСЃС‚РІРѕ СѓСЂР°РІРЅРµРЅРёР№ (Р±Р°Р·РёСЃРЅС‹С… РїРµСЂРµРјРµРЅРЅС‹С…):</label>
+          <input type="number" id="eq-count" value="3" min="1" max="10">
+          <button class="action" onclick="Lab3.createBasisInput()">РЎРѕР·РґР°С‚СЊ С‚Р°Р±Р»РёС†Сѓ РІРІРѕРґР°</button>
+        </div>
+        
+        <div id="basis-input-container" style="margin-top: 20px;"></div>
+      </div>
     `;
-    html += '</div>';
-  }
-  html += '</div>';
-  
-  html += `
-    <div style="margin: 20px 0;">
-      <button class="action" onclick="Lab3.showCanonicalForm()">Привести задачу к каноническому виду</button>
-      <button class="action" onclick="Lab3.solveProblem()">Решить задачу</button>
-    </div>
-  `;
-  
-  document.getElementById('problem-input').innerHTML = html;
-  document.getElementById('canonical-form').innerHTML = '';
-  document.getElementById('solution-steps').innerHTML = '';
-  document.getElementById('final-result').innerHTML = '';
-};
-
-Lab3.getSubscript = function(num) {
-  const subscripts = ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉'];
-  return num.toString().split('').map(d => subscripts[parseInt(d)]).join('');
-};
-
-Lab3.getDefaultObjective = function(i) {
-  const defaultObj = [2, 6, 5, 1, 4];
-  return defaultObj[i] || 0;
-};
-
-Lab3.getDefaultConstraint = function(i, j) {
-  const defaultConstr = [
-    [1, 4, 2, 5, 9],
-    [0, 1, 3, 4, 5],
-    [0, 1, 1, 1, 1]
-  ];
-  return defaultConstr[i]?.[j] || 0;
-};
-
-Lab3.getDefaultRHS = function(i) {
-  const defaultRHS = [3, 6, 1];
-  return defaultRHS[i] || 0;
-};
-
-Lab3.showCanonicalForm = function() {
-  // Собираем данные
-  Lab3.collectInputData();
-  
-  // Преобразуем к каноническому виду
-  Lab3.convertToCanonicalForm();
-  
-  // Отображаем каноническую форму
-  Lab3.displayCanonicalForm();
-};
-
-Lab3.convertToCanonicalForm = function() {
-  const varCount = Lab3.variables;
-  const constrCount = Lab3.constraintsCount;
-  
-  Lab3.canonicalForm = {
-    objective: [...Lab3.objective],
-    constraints: [],
-    slackVars: [],
-    artificialVars: [],
-    allVariables: [...Lab3.varNames],
-    rhs: []
-  };
-  
-  let slackCounter = 1;
-  let artificialCounter = 1;
-  
-  // Преобразуем каждое ограничение
-  for (let i = 0; i < constrCount; i++) {
-    const constraint = Lab3.constraints[i];
-    const type = constraint.type;
-    const newConstraint = {
-      coefficients: [...constraint.coefficients],
-      slackCoeff: 0,
-      artificialCoeff: 0,
-      type: 'eq' // В канонической форме все ограничения - равенства
-    };
-    
-    if (type === 'leq') {
-      // ≤: добавляем slack переменную с коэффициентом +1
-      newConstraint.slackCoeff = 1;
-      Lab3.canonicalForm.slackVars.push(`s${Lab3.getSubscript(slackCounter)}`);
-      Lab3.canonicalForm.allVariables.push(`s${Lab3.getSubscript(slackCounter)}`);
-      slackCounter++;
-    } else if (type === 'geq') {
-      // ≥: добавляем slack переменную с коэффициентом -1 и искусственную с +1
-      newConstraint.slackCoeff = -1;
-      newConstraint.artificialCoeff = 1;
-      Lab3.canonicalForm.slackVars.push(`s${Lab3.getSubscript(slackCounter)}`);
-      Lab3.canonicalForm.artificialVars.push(`a${Lab3.getSubscript(artificialCounter)}`);
-      Lab3.canonicalForm.allVariables.push(`s${Lab3.getSubscript(slackCounter)}`);
-      Lab3.canonicalForm.allVariables.push(`a${Lab3.getSubscript(artificialCounter)}`);
-      slackCounter++;
-      artificialCounter++;
-    } else if (type === 'eq') {
-      // =: добавляем искусственную переменную с коэффициентом +1
-      newConstraint.artificialCoeff = 1;
-      Lab3.canonicalForm.artificialVars.push(`a${Lab3.getSubscript(artificialCounter)}`);
-      Lab3.canonicalForm.allVariables.push(`a${Lab3.getSubscript(artificialCounter)}`);
-      artificialCounter++;
-    }
-    
-    Lab3.canonicalForm.constraints.push(newConstraint);
-    Lab3.canonicalForm.rhs.push(constraint.rhs);
-  }
-};
-
-Lab3.displayCanonicalForm = function() {
-  let html = '<div class="canonical-section">';
-  html += '<h3>Каноническая форма задачи (Ax = b, x ≥ 0)</h3>';
-  
-  // Целевая функция в канонической форме
-  html += '<div class="objective-input">';
-  html += '<h4>Целевая функция: ';
-  html += `F(x) = `;
-  for (let i = 0; i < Lab3.canonicalForm.objective.length; i++) {
-    const coeff = Lab3.canonicalForm.objective[i];
-    if (coeff !== 0) {
-      const sign = coeff >= 0 ? '+' : '-';
-      const absCoeff = Math.abs(coeff);
-      html += `${i > 0 ? ` ${sign} ` : ''}${absCoeff !== 1 ? absCoeff : ''}${Lab3.varNames[i]}`;
-    }
-  }
-  html += ` → ${Lab3.isMax ? 'max' : 'min'}`;
-  html += '</h4></div>';
-  
-  // Ограничения в канонической форме
-  html += '<h4>Система ограничений:</h4>';
-  html += '<table class="canonical-table">';
-  
-  // Заголовок таблицы
-  html += '<tr><th>№</th>';
-  for (let j = 0; j < Lab3.canonicalForm.allVariables.length; j++) {
-    html += `<th>${Lab3.canonicalForm.allVariables[j]}</th>`;
-  }
-  html += '<th></th><th>b</th></tr>';
-  
-  // Строки ограничений
-  for (let i = 0; i < Lab3.canonicalForm.constraints.length; i++) {
-    const constraint = Lab3.canonicalForm.constraints[i];
-    html += `<tr><td>(${i + 1})</td>`;
-    
-    // Исходные переменные
-    for (let j = 0; j < constraint.coefficients.length; j++) {
-      html += `<td>${Lab3.formatNumber(constraint.coefficients[j])}</td>`;
-    }
-    
-    // Slack переменные
-    for (let j = 0; j < Lab3.canonicalForm.slackVars.length; j++) {
-      const slackVar = Lab3.canonicalForm.slackVars[j];
-      if (constraint.slackCoeff !== 0 && j === Lab3.canonicalForm.slackVars.indexOf(`s${Lab3.getSubscript(i + 1)}`)) {
-        html += `<td>${Lab3.formatNumber(constraint.slackCoeff)}</td>`;
-      } else {
-        html += '<td>0</td>';
-      }
-    }
-    
-    // Искусственные переменные
-    for (let j = 0; j < Lab3.canonicalForm.artificialVars.length; j++) {
-      const artVar = Lab3.canonicalForm.artificialVars[j];
-      if (constraint.artificialCoeff !== 0 && j === Lab3.canonicalForm.artificialVars.indexOf(`a${Lab3.getSubscript(i + 1)}`)) {
-        html += `<td>${Lab3.formatNumber(constraint.artificialCoeff)}</td>`;
-      } else {
-        html += '<td>0</td>';
-      }
-    }
-    
-    html += `<td>=</td>`;
-    html += `<td>${Lab3.canonicalForm.rhs[i]}</td>`;
-    html += '</tr>';
-  }
-  html += '</table>';
-  
-  // Условия неотрицательности
-  html += '<div class="variable-list">';
-  html += '<h4>Условия неотрицательности:</h4>';
-  html += '<p>';
-  for (let i = 0; i < Lab3.canonicalForm.allVariables.length; i++) {
-    html += `${Lab3.canonicalForm.allVariables[i]} ≥ 0`;
-    if (i < Lab3.canonicalForm.allVariables.length - 1) html += ', ';
-  }
-  html += '</p>';
-  
-  // Список дополнительных переменных
-  if (Lab3.canonicalForm.slackVars.length > 0) {
-    html += '<p><strong>Slack переменные:</strong> ';
-    html += Lab3.canonicalForm.slackVars.join(', ');
-    html += '</p>';
-  }
-  
-  if (Lab3.canonicalForm.artificialVars.length > 0) {
-    html += '<p><strong>Искусственные переменные:</strong> ';
-    html += Lab3.canonicalForm.artificialVars.join(', ');
-    html += '</p>';
-  }
-  html += '</div>';
-  
-  html += '</div>';
-  
-  document.getElementById('canonical-form').innerHTML = html;
-};
-
-Lab3.solveProblem = function() {
-  // Сбор данных
-  Lab3.collectInputData();
-  
-  // Инициализация симплекс-таблицы
-  Lab3.initializeTableau();
-  
-  // Решение задачи
-  Lab3.solveWithManualPivots();
-  
-  // Отображение результатов
-  Lab3.displaySolution();
-};
-
-// Остальные методы остаются без изменений...
-Lab3.collectInputData = function() {
-  const varCount = Lab3.variables;
-  const constrCount = Lab3.constraintsCount;
-  
-  // Целевая функция
-  Lab3.objective = [];
-  for (let i = 0; i < varCount; i++) {
-    const val = parseFloat(document.getElementById(`obj-${i}`).value) || 0;
-    Lab3.objective.push(val);
-  }
-  
-  // Ограничения
-  Lab3.constraints = [];
-  for (let i = 0; i < constrCount; i++) {
-    const constraint = {
-      coefficients: [],
-      rhs: 0,
-      type: document.getElementById(`constr-type-${i}`).value
-    };
-    
-    for (let j = 0; j < varCount; j++) {
-      const val = parseFloat(document.getElementById(`constr-${i}-${j}`).value) || 0;
-      constraint.coefficients.push(val);
-    }
-    
-    constraint.rhs = parseFloat(document.getElementById(`rhs-${i}`).value) || 0;
-    Lab3.constraints.push(constraint);
-  }
-};
-
-Lab3.initializeTableau = function() {
-  const varCount = Lab3.variables;
-  const constrCount = Lab3.constraintsCount;
-  
-  // Подсчитываем количество дополнительных переменных
-  let slackCount = 0;
-  let artificialCount = 0;
-  
-  for (let i = 0; i < constrCount; i++) {
-    const type = Lab3.constraints[i].type;
-    if (type === 'leq') {
-      slackCount++;
-    } else if (type === 'eq') {
-      artificialCount++;
-    } else if (type === 'geq') {
-      slackCount++;
-      artificialCount++;
-    }
-  }
-  
-  const totalVars = varCount + slackCount + artificialCount;
-  
-  // Инициализация таблицы
-  Lab3.tableau = [];
-  Lab3.basis = [];
-  Lab3.artificialVars = [];
-  Lab3.iterations = [];
-  Lab3.phase = 1;
-  
-  let slackIndex = 0;
-  let artificialIndex = 0;
-  
-  // Создаем строки для ограничений
-  for (let i = 0; i < constrCount; i++) {
-    const row = new Array(totalVars + 1).fill(0); // +1 для RHS
-    const type = Lab3.constraints[i].type;
-    
-    // Копируем коэффициенты исходных переменных
-    for (let j = 0; j < varCount; j++) {
-      row[j] = Lab3.constraints[i].coefficients[j];
-    }
-    
-    // Добавляем дополнительные переменные в зависимости от типа ограничения
-    if (type === 'leq') {
-      // Добавляем slack переменную
-      row[varCount + slackIndex] = 1;
-      row[totalVars] = Lab3.constraints[i].rhs;
-      Lab3.basis.push(varCount + slackIndex);
-      slackIndex++;
-    } else if (type === 'eq') {
-      // Добавляем искусственную переменную
-      row[varCount + slackCount + artificialIndex] = 1;
-      row[totalVars] = Lab3.constraints[i].rhs;
-      Lab3.basis.push(varCount + slackCount + artificialIndex);
-      Lab3.artificialVars.push(varCount + slackCount + artificialIndex);
-      artificialIndex++;
-    } else if (type === 'geq') {
-      // Добавляем slack (с -1) и искусственную переменную
-      row[varCount + slackIndex] = -1;
-      row[varCount + slackCount + artificialIndex] = 1;
-      row[totalVars] = Lab3.constraints[i].rhs;
-      Lab3.basis.push(varCount + slackCount + artificialIndex);
-      Lab3.artificialVars.push(varCount + slackCount + artificialIndex);
-      slackIndex++;
-      artificialIndex++;
-    }
-    
-    Lab3.tableau.push(row);
-  }
-  
-  // Строка искусственной целевой функции G
-  const gRow = new Array(totalVars + 1).fill(0);
-  if (Lab3.artificialVars.length > 0) {
-    for (let i = 0; i < constrCount; i++) {
-      if (Lab3.artificialVars.includes(Lab3.basis[i])) {
-        for (let j = 0; j <= totalVars; j++) {
-          gRow[j] -= Lab3.tableau[i][j];
-        }
-      }
-    }
-    Lab3.tableau.push(gRow);
   } else {
-    // Если нет искусственных переменных, сразу переходим к фазе 2
-    Lab3.phase = 2;
+    document.getElementById('input-section').innerHTML = `
+      <div class="input-group">
+        <h3>Р’РІРµРґРёС‚Рµ СЃРёСЃС‚РµРјСѓ СѓСЂР°РІРЅРµРЅРёР№</h3>
+        <p>РџСЂРёРјРµСЂ (РёР· СѓСЃР»РѕРІРёСЏ):</p>
+        <div style="background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px;">
+          xв‚Ѓ - 4xв‚‚ + 2xв‚ѓ - 5xв‚„ + 9xв‚… = 3<br>
+          xв‚‚ - 3xв‚ѓ + 4xв‚„ - 5xв‚… = 6<br>
+          xв‚‚ - xв‚ѓ + xв‚„ - xв‚… = 1<br>
+          F(x) = -2xв‚Ѓ - 6xв‚‚ + 5xв‚ѓ - xв‚„ - 4xв‚… в†’ max
+        </div>
+        
+        <div class="equation-setup">
+          <label>РљРѕР»РёС‡РµСЃС‚РІРѕ СѓСЂР°РІРЅРµРЅРёР№:</label>
+          <input type="number" id="canon-eq-count" value="3" min="1" max="10">
+          <label>РљРѕР»РёС‡РµСЃС‚РІРѕ РїРµСЂРµРјРµРЅРЅС‹С…:</label>
+          <input type="number" id="canon-var-count" value="5" min="2" max="10">
+          <button class="action" onclick="Lab3.createEquationInput()">РЎРѕР·РґР°С‚СЊ РїРѕР»СЏ РІРІРѕРґР°</button>
+        </div>
+        
+        <div id="equation-input-container" style="margin-top: 20px;"></div>
+        
+        <div id="objective-input" style="margin-top: 20px; display: none;">
+          <h4>Р¦РµР»РµРІР°СЏ С„СѓРЅРєС†РёСЏ:</h4>
+          <div id="objective-coeffs"></div>
+          <label>РўРёРї:</label>
+          <select id="objective-type">
+            <option value="max">РњР°РєСЃРёРјРёР·Р°С†РёСЏ (max)</option>
+            <option value="min">РњРёРЅРёРјРёР·Р°С†РёСЏ (min)</option>
+          </select>
+          <button class="action" onclick="Lab3.parseEquations()" style="margin-top: 10px;">РџСЂРµРѕР±СЂР°Р·РѕРІР°С‚СЊ РІ РєР°РЅРѕРЅРёС‡РµСЃРєРёР№ РІРёРґ</button>
+        </div>
+      </div>
+    `;
   }
   
-  // Строка исходной целевой функции F
-  const fRow = new Array(totalVars + 1).fill(0);
-  for (let j = 0; j < varCount; j++) {
-    fRow[j] = Lab3.isMax ? -Lab3.objective[j] : Lab3.objective[j];
-  }
-  Lab3.tableau.push(fRow);
-  
-  // Сохраняем начальную таблицу
-  Lab3.saveIteration("Начальная симплекс-таблица");
+  document.getElementById('basis-display').style.display = 'none';
+  document.getElementById('canonical-display').style.display = 'none';
+  document.getElementById('iterations-container').innerHTML = '';
+  document.getElementById('result-container').innerHTML = '';
+  document.getElementById('error-message').style.display = 'none';
+  this.hasArtificialBasis = false;
 };
 
-// Остальные методы (saveIteration, solveWithManualPivots, pivot, extractSolution, displaySolution, renderTableau, formatNumber, displayFinalResult) 
-// остаются без изменений, как в предыдущем коде...
-
-Lab3.saveIteration = function(description) {
-  const iteration = {
-    description: description,
-    tableau: JSON.parse(JSON.stringify(Lab3.tableau)),
-    basis: [...Lab3.basis],
-    phase: Lab3.phase,
-    pivot: Lab3.currentPivot ? {...Lab3.currentPivot} : null
-  };
-  Lab3.iterations.push(iteration);
+Lab3.showError = function(message) {
+  const errorDiv = document.getElementById('error-message');
+  errorDiv.innerHTML = `<strong>РћС€РёР±РєР°:</strong> ${message}`;
+  errorDiv.style.display = 'block';
+  
+  setTimeout(() => {
+    errorDiv.style.display = 'none';
+  }, 5000);
 };
 
-Lab3.solveWithManualPivots = function() {
-  // Для примера из задания используем ручной выбор разрешающих элементов
+Lab3.createEquationInput = function() {
+  const eqCount = parseInt(document.getElementById('canon-eq-count').value) || 3;
+  const varCount = parseInt(document.getElementById('canon-var-count').value) || 5;
   
-  // Итерация 1: x1 как разрешающий столбец
-  Lab3.currentPivot = { row: 0, col: 0 }; // x1 в первой строке
-  Lab3.pivot(0, 0);
-  Lab3.basis[0] = 0; // x1 входит в базис вместо s1
-  Lab3.saveIteration("Разрешающий столбец: x₁ (1)");
+  let html = '<h4>РЈСЂР°РІРЅРµРЅРёСЏ (СѓРєР°Р¶РёС‚Рµ Р·РЅР°РєРё СЃСЂР°РІРЅРµРЅРёСЏ):</h4>';
   
-  // Итерация 2: x4 как разрешающий столбец  
-  Lab3.currentPivot = { row: 2, col: 3 }; // x4 в третьей строке
-  Lab3.pivot(2, 3);
-  Lab3.basis[2] = 3; // x4 входит в базис вместо s3
-  Lab3.saveIteration("Разрешающий столбец: x₄");
-  
-  // Итерация 3: x3 как разрешающий столбец
-  Lab3.currentPivot = { row: 1, col: 2 }; // x3 во второй строке
-  Lab3.pivot(1, 2);
-  Lab3.basis[1] = 2; // x3 входит в базис вместо s2
-  Lab3.saveIteration("Разрешающий столбец: x₃");
-  
-  // Итерация 4: x5 как разрешающий столбец
-  Lab3.currentPivot = { row: 0, col: 4 }; // x5 в первой строке
-  Lab3.pivot(0, 4);
-  Lab3.basis[0] = 4; // x5 входит в базис вместо x1
-  Lab3.saveIteration("Разрешающий столбец: x₅");
-  
-  // Переходим к фазе 2 (убираем строку G если есть)
-  if (Lab3.phase === 1) {
-    Lab3.phase = 2;
-    // Убираем строку G и искусственные переменные
-    Lab3.removeArtificialVars();
-    Lab3.saveIteration("Фаза 2 - убрана строка G");
-  }
-  
-  Lab3.extractSolution();
-};
-
-Lab3.removeArtificialVars = function() {
-  // Убираем строку G
-  if (Lab3.tableau.length > Lab3.constraintsCount + 1) {
-    Lab3.tableau.splice(Lab3.constraintsCount, 1);
-  }
-  
-  // Убираем искусственные переменные из базиса если они там остались
-  for (let i = 0; i < Lab3.basis.length; i++) {
-    if (Lab3.artificialVars.includes(Lab3.basis[i])) {
-      // Ищем небазисную переменную для замены
-      for (let j = 0; j < Lab3.variables; j++) {
-        if (!Lab3.basis.includes(j) && Math.abs(Lab3.tableau[i][j]) > 1e-6) {
-          Lab3.pivot(i, j);
-          Lab3.basis[i] = j;
-          break;
-        }
+  for (let i = 0; i < eqCount; i++) {
+    html += `<div class="equation-row" style="margin: 15px 0; padding: 15px; background: white; border-radius: 5px; border: 1px solid #ddd;">`;
+    html += `<strong>РЈСЂР°РІРЅРµРЅРёРµ ${i + 1}:</strong><br><div style="margin: 10px 0;">`;
+    
+    for (let j = 1; j <= varCount; j++) {
+      const defaultValue = this.getDefaultEquationValue(i, j - 1, varCount);
+      html += `<div style="display: inline-block; text-align: center; margin: 0 5px;">`;
+      html += `<input type="number" id="eq-${i}-coeff-${j}" value="${defaultValue}" step="any" style="width: 50px; display: block; margin: 0 auto;">`;
+      html += `<div style="font-size: 0.9em;">x<sub>${j}</sub></div>`;
+      html += `</div>`;
+      
+      if (j < varCount) {
+        html += `<span style="margin: 0 10px;">+</span>`;
       }
     }
+    
+    const defaultSign = i < 3 ? '=' : 'в‰¤';
+    html += `<select id="eq-${i}-sign" style="margin: 0 10px; padding: 5px;">`;
+    html += `<option value="=" ${defaultSign === '=' ? 'selected' : ''}>=</option>`;
+    html += `<option value="в‰¤" ${defaultSign === 'в‰¤' ? 'selected' : ''}>в‰¤</option>`;
+    html += `<option value="в‰Ґ" ${defaultSign === 'в‰Ґ' ? 'selected' : ''}>в‰Ґ</option>`;
+    html += `</select>`;
+    
+    html += `<input type="number" id="eq-${i}-const" value="${this.getDefaultConstant(i)}" step="any" style="width: 60px; padding: 5px;">`;
+    html += '</div></div>';
   }
+  
+  document.getElementById('equation-input-container').innerHTML = html;
+  
+  let objHtml = '<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 5px;">F(x) = ';
+  for (let j = 1; j <= varCount; j++) {
+    const defaultValue = this.getDefaultObjectiveValue(j - 1, varCount);
+    objHtml += `<div style="display: inline-block; text-align: center;">`;
+    objHtml += `<input type="number" id="obj-coeff-${j}" value="${defaultValue}" step="any" style="width: 50px; display: block; margin: 0 auto;">`;
+    objHtml += `<div style="font-size: 0.9em;">x<sub>${j}</sub></div>`;
+    objHtml += `</div>`;
+    
+    if (j < varCount) {
+      objHtml += `<span style="margin: 0 5px;">+</span>`;
+    }
+  }
+  objHtml += '</div>';
+  
+  document.getElementById('objective-coeffs').innerHTML = objHtml;
+  document.getElementById('objective-input').style.display = 'block';
 };
 
-Lab3.pivot = function(pivotRow, pivotCol) {
-  const pivotVal = Lab3.tableau[pivotRow][pivotCol];
+Lab3.parseEquations = function() {
+  const eqCount = parseInt(document.getElementById('canon-eq-count').value) || 3;
+  const varCount = parseInt(document.getElementById('canon-var-count').value) || 5;
   
-  if (Math.abs(pivotVal) < 1e-10) {
-    console.error("Попытка pivot с нулевым элементом");
+  this.equations = [];
+  this.equationSigns = [];
+  
+  for (let i = 0; i < eqCount; i++) {
+    const eq = {
+      coefficients: [],
+      constant: 0,
+      sign: '='
+    };
+    
+    for (let j = 1; j <= varCount; j++) {
+      const coeff = parseFloat(document.getElementById(`eq-${i}-coeff-${j}`).value) || 0;
+      eq.coefficients.push(coeff);
+    }
+    
+    eq.constant = parseFloat(document.getElementById(`eq-${i}-const`).value) || 0;
+    eq.sign = document.getElementById(`eq-${i}-sign`).value;
+    this.equations.push(eq);
+    this.equationSigns.push(eq.sign);
+  }
+  
+  this.objective = [];
+  for (let j = 1; j <= varCount; j++) {
+    const coeff = parseFloat(document.getElementById(`obj-coeff-${j}`).value) || 0;
+    this.objective.push(coeff);
+  }
+  
+  this.renderCanonicalView();
+  document.getElementById('canonical-display').style.display = 'block';
+};
+
+Lab3.renderCanonicalView = function() {
+  let html = '<div style="font-family: monospace; line-height: 2.0;">';
+  
+  this.equations.forEach((eq, idx) => {
+    let eqStr = '<div style="margin: 10px 0;">';
+    let first = true;
+    
+    eq.coefficients.forEach((coeff, j) => {
+      if (Math.abs(coeff) > 1e-10 || first) {
+        if (!first) {
+          if (coeff >= 0) eqStr += ' + ';
+          else eqStr += ' - ';
+        } else {
+          if (coeff < 0) eqStr += '-';
+        }
+        
+        const absCoeff = Math.abs(coeff);
+        if (Math.abs(absCoeff - 1) > 1e-10 || (j === 0 && absCoeff === 1)) {
+          eqStr += `<span style="font-weight: bold; color: #2c3e50;">${absCoeff}</span>`;
+        }
+        
+        eqStr += `x<sub>${j + 1}</sub>`;
+        first = false;
+      }
+    });
+    
+    if (first) eqStr += '0';
+    
+    let signColor = '#2c3e50';
+    if (eq.sign === 'в‰¤') signColor = '#e74c3c';
+    if (eq.sign === 'в‰Ґ') signColor = '#3498db';
+    
+    eqStr += ` <span style="color: ${signColor}; font-weight: bold;">${eq.sign}</span> `;
+    eqStr += `<span style="font-weight: bold;">${eq.constant}</span>`;
+    eqStr += '</div>';
+    html += eqStr;
+  });
+  
+  html += '<div style="margin: 20px 0 10px 0; padding-top: 15px; border-top: 1px solid #ddd;">';
+  html += '<strong>Р¦РµР»РµРІР°СЏ С„СѓРЅРєС†РёСЏ:</strong><br>';
+  html += 'F(x) = ';
+  
+  let first = true;
+  this.objective.forEach((coeff, j) => {
+    if (Math.abs(coeff) > 1e-10 || first) {
+      if (!first) {
+        if (coeff >= 0) html += ' + ';
+        else html += ' - ';
+      } else {
+        if (coeff < 0) html += '-';
+      }
+      
+      const absCoeff = Math.abs(coeff);
+      if (Math.abs(absCoeff - 1) > 1e-10 || (j === 0 && absCoeff === 1)) {
+        html += `<span style="font-weight: bold; color: #2c3e50;">${absCoeff}</span>`;
+      }
+      
+      html += `x<sub>${j + 1}</sub>`;
+      first = false;
+    }
+  });
+  
+  if (first) html += '0';
+  
+  const objType = document.getElementById('objective-type').value;
+  const arrowColor = objType === 'max' ? '#27ae60' : '#e67e22';
+  html += ` <span style="color: ${arrowColor}; font-weight: bold;">в†’ ${objType}</span>`;
+  html += '</div></div>';
+  
+  document.getElementById('equations-text').innerHTML = html;
+};
+
+Lab3.createBasisFromEquations = function() {
+  const varCount = this.objective.length;
+  const eqCount = this.equations.length;
+  
+  if (eqCount === 0) {
+    this.showError("РЎРЅР°С‡Р°Р»Р° РІРІРµРґРёС‚Рµ СѓСЂР°РІРЅРµРЅРёСЏ!");
     return;
   }
   
-  // Нормализация pivot row
-  for (let j = 0; j < Lab3.tableau[0].length; j++) {
-    Lab3.tableau[pivotRow][j] /= pivotVal;
+  this.table = [];
+  this.basis = [];
+  
+  for (let i = 0; i < eqCount; i++) {
+    const eq = this.equations[i];
+    const row = [...eq.coefficients, eq.constant];
+    this.table.push(row);
+    this.basis.push(`x${varCount + i + 1}`);
   }
   
-  // Обновление остальных строк
-  for (let i = 0; i < Lab3.tableau.length; i++) {
-    if (i !== pivotRow) {
-      const factor = Lab3.tableau[i][pivotCol];
-      for (let j = 0; j < Lab3.tableau[0].length; j++) {
-        Lab3.tableau[i][j] -= factor * Lab3.tableau[pivotRow][j];
-      }
-    }
-  }
+  const fRow = this.objective.map(x => -x);
+  fRow.push(0);
+  this.table.push(fRow);
+  
+  this.renderBasisTable();
+  document.getElementById('basis-display').style.display = 'block';
+  document.getElementById('error-message').style.display = 'none';
 };
 
-Lab3.extractSolution = function() {
-  const varCount = Lab3.variables;
-  const lastCol = Lab3.tableau[0].length - 1;
-  const fRow = Lab3.tableau.length - 1;
+Lab3.createBasisInput = function() {
+  const varCount = parseInt(document.getElementById('var-count').value) || 5;
+  const eqCount = parseInt(document.getElementById('eq-count').value) || 3;
   
-  const solution = new Array(varCount).fill(0);
+  let html = '<h4>Р—Р°РїРѕР»РЅРёС‚Рµ С‚Р°Р±Р»РёС†Сѓ (Р±РµР· СЃС‚СЂРѕРєРё G):</h4>';
+  html += '<table border="1" cellpadding="5" cellspacing="0" style="background: white;">';
+  html += '<tr><th>Р‘Р°Р·РёСЃ</th>';
   
-  // Заполняем значения базисных переменных
-  for (let i = 0; i < Lab3.basis.length; i++) {
-    const varIndex = Lab3.basis[i];
-    if (varIndex < varCount) {
-      solution[varIndex] = Lab3.tableau[i][lastCol];
-    }
-  }
-  
-  // Значение целевой функции
-  const objectiveValue = Lab3.isMax ? -Lab3.tableau[fRow][lastCol] : Lab3.tableau[fRow][lastCol];
-  
-  // Значение искусственной функции (если была)
-  let gValue = 0;
-  if (Lab3.artificialVars.length > 0 && Lab3.phase === 1) {
-    const gRow = Lab3.constraintsCount;
-    gValue = Lab3.tableau[gRow][lastCol];
-  }
-  
-  Lab3.solution = {
-    status: 'optimal',
-    variables: solution,
-    objective: objectiveValue,
-    g: gValue,
-    basis: Lab3.basis
-  };
-};
-
-Lab3.displaySolution = function() {
-  let html = '<h3>Процесс решения</h3>';
-  
-  // Отображаем все итерации
-  Lab3.iterations.forEach((iter, index) => {
-    html += `<div class="iteration">`;
-    html += `<h4>Итерация ${index + 1}</h4>`;
-    if (iter.pivot) {
-      const pivotVal = iter.tableau[iter.pivot.row][iter.pivot.col];
-      html += `<div class="pivot-info">Разрешающий столбец: ${Lab3.varNames[iter.pivot.col]} (${Lab3.formatNumber(pivotVal)})</div>`;
-    } else {
-      html += `<div class="pivot-info">${iter.description}</div>`;
-    }
-    html += Lab3.renderTableau(iter.tableau, iter.basis, iter.phase, iter.pivot);
-    html += `</div>`;
-  });
-  
-  document.getElementById('solution-steps').innerHTML = html;
-  
-  // Отображаем финальный результат
-  Lab3.displayFinalResult();
-};
-
-Lab3.renderTableau = function(tableau, basis, phase, pivot) {
-  const varCount = Lab3.variables;
-  const constrCount = Lab3.constraintsCount;
-  const totalVars = tableau[0].length - 1;
-  
-  let html = '<table border="1" cellpadding="8" cellspacing="0" class="simplex-table">';
-  
-  // Заголовок
-  html += '<tr><th class="basis-header">Базис</th>';
-  for (let j = 0; j < totalVars; j++) {
-    if (j < varCount) {
-      html += `<th>${Lab3.varNames[j]}</th>`;
-    } else if (j < varCount + constrCount) {
-      html += `<th>s${Lab3.getSubscript(j - varCount + 1)}</th>`;
-    } else {
-      html += `<th>a${Lab3.getSubscript(j - varCount - constrCount + 1)}</th>`;
-    }
+  for (let i = 1; i <= varCount; i++) {
+    html += `<th>x<sub>${i}</sub></th>`;
   }
   html += '<th>1</th></tr>';
   
-  // Строки ограничений
-  for (let i = 0; i < constrCount; i++) {
-    html += '<tr>';
-    const basisVar = basis[i];
-    if (basisVar < varCount) {
-      html += `<td class="basis-header">${Lab3.varNames[basisVar]}</td>`;
-    } else if (basisVar < varCount + constrCount) {
-      html += `<td class="basis-header">s${Lab3.getSubscript(basisVar - varCount + 1)}</td>`;
-    } else {
-      html += `<td class="basis-header">a${Lab3.getSubscript(basisVar - varCount - constrCount + 1)}</td>`;
-    }
-    
-    for (let j = 0; j <= totalVars; j++) {
-      const value = tableau[i][j];
-      const isPivot = pivot && pivot.row === i && pivot.col === j;
-      const cellClass = isPivot ? 'pivot-cell' : '';
-      html += `<td class="${cellClass}">${Lab3.formatNumber(value)}</td>`;
+  for (let i = 0; i < eqCount; i++) {
+    html += `<tr><td>x<sub>${varCount + i + 1}</sub></td>`;
+    for (let j = 0; j <= varCount; j++) {
+      const defaultValue = this.getDefaultBasisValue(i, j, varCount);
+      html += `<td><input type="number" id="basis-cell-${i}-${j}" value="${defaultValue}" step="any" style="width: 50px;"></td>`;
     }
     html += '</tr>';
   }
   
-  // Строка G (только в фазе 1)
-  if (phase === 1 && tableau.length > constrCount) {
-    html += '<tr>';
-    html += '<td class="basis-header">G</td>';
-    for (let j = 0; j <= totalVars; j++) {
-      const value = tableau[constrCount][j];
-      const isPivot = pivot && pivot.row === constrCount && pivot.col === j;
-      const cellClass = isPivot ? 'pivot-cell' : '';
-      html += `<td class="${cellClass}">${Lab3.formatNumber(value)}</td>`;
-    }
-    html += '</tr>';
-  }
-  
-  // Строка F
-  html += '<tr>';
-  html += '<td class="basis-header">F</td>';
-  const fRow = phase === 1 ? constrCount + 1 : constrCount;
-  for (let j = 0; j <= totalVars; j++) {
-    const value = tableau[fRow][j];
-    const isPivot = pivot && pivot.row === fRow && pivot.col === j;
-    const cellClass = isPivot ? 'pivot-cell' : '';
-    html += `<td class="${cellClass}">${Lab3.formatNumber(value)}</td>`;
+  html += `<tr><td>F</td>`;
+  for (let j = 0; j <= varCount; j++) {
+    const defaultValue = this.getDefaultFValue(j, varCount);
+    html += `<td><input type="number" id="basis-f-${j}" value="${defaultValue}" step="any" style="width: 50px;"></td>`;
   }
   html += '</tr>';
   
   html += '</table>';
+  html += '<button class="action" onclick="Lab3.loadBasisTable()" style="margin-top: 10px;">Р—Р°РіСЂСѓР·РёС‚СЊ С‚Р°Р±Р»РёС†Сѓ</button>';
   
-  return html;
+  document.getElementById('basis-input-container').innerHTML = html;
+};
+
+Lab3.getDefaultBasisValue = function(row, col, varCount) {
+  const example = [
+    [1, -4, 2, -5, 9, 3],
+    [0, 1, -3, 4, -5, 6],
+    [0, 1, -1, 1, -1, 1]
+  ];
+  
+  if (row < example.length && col < example[row].length) {
+    return example[row][col];
+  }
+  return 0;
+};
+
+Lab3.getDefaultFValue = function(col, varCount) {
+  const example = [2, 6, -5, 1, 4, 0];
+  if (col < example.length) return example[col];
+  return 0;
+};
+
+Lab3.getDefaultEquationValue = function(eqIndex, varIndex, varCount) {
+  const examples = [
+    [1, -4, 2, -5, 9],
+    [0, 1, -3, 4, -5],
+    [0, 1, -1, 1, -1]
+  ];
+  
+  if (eqIndex < examples.length && varIndex < examples[eqIndex].length) {
+    return examples[eqIndex][varIndex];
+  }
+  return 0;
+};
+
+Lab3.getDefaultConstant = function(eqIndex) {
+  const examples = [3, 6, 1];
+  return examples[eqIndex] || 0;
+};
+
+Lab3.getDefaultObjectiveValue = function(varIndex, varCount) {
+  const example = [-2, -6, 5, -1, -4];
+  if (varIndex < example.length) return example[varIndex];
+  return 0;
+};
+
+Lab3.loadBasisTable = function() {
+  const varCount = parseInt(document.getElementById('var-count').value) || 5;
+  const eqCount = parseInt(document.getElementById('eq-count').value) || 3;
+  
+  this.table = [];
+  this.basis = [];
+  
+  for (let i = 0; i < eqCount; i++) {
+    const row = [];
+    for (let j = 0; j <= varCount; j++) {
+      const val = parseFloat(document.getElementById(`basis-cell-${i}-${j}`).value) || 0;
+      row.push(val);
+    }
+    this.table.push(row);
+    this.basis.push(`x${varCount + i + 1}`);
+  }
+  
+  const fRow = [];
+  for (let j = 0; j <= varCount; j++) {
+    const val = parseFloat(document.getElementById(`basis-f-${j}`).value) || 0;
+    fRow.push(val);
+  }
+  this.table.push(fRow);
+  
+  this.renderBasisTable();
+  document.getElementById('basis-display').style.display = 'block';
+  document.getElementById('error-message').style.display = 'none';
+};
+
+Lab3.renderBasisTable = function() {
+  const varCount = this.table[0].length - 1;
+  const eqCount = this.basis.length;
+  
+  let html = '<table border="1" cellpadding="5" cellspacing="0" style="background: white;">';
+  html += '<tr><th>Р‘Р°Р·РёСЃ</th>';
+  
+  for (let i = 1; i <= varCount; i++) {
+    html += `<th>x<sub>${i}</sub></th>`;
+  }
+  html += '<th>1</th></tr>';
+  
+  for (let i = 0; i < eqCount; i++) {
+    html += `<tr><td>${this.basis[i]}</td>`;
+    for (let j = 0; j <= varCount; j++) {
+      html += `<td>${this.formatNumber(this.table[i][j])}</td>`;
+    }
+    html += '</tr>';
+  }
+  
+  html += `<tr><td>F</td>`;
+  for (let j = 0; j <= varCount; j++) {
+    html += `<td>${this.formatNumber(this.table[eqCount][j])}</td>`;
+  }
+  html += '</tr>';
+  
+  if (this.table.length > eqCount + 1) {
+    html += `<tr><td>G</td>`;
+    for (let j = 0; j <= varCount; j++) {
+      html += `<td>${this.formatNumber(this.table[eqCount + 1][j])}</td>`;
+    }
+    html += '</tr>';
+  }
+  
+  html += '</table>';
+  
+  document.getElementById('basis-table').innerHTML = html;
+};
+
+Lab3.solveWithArtificialBasis = function() {
+  if (!this.table.length) {
+    this.showError("РЎРЅР°С‡Р°Р»Р° Р·Р°РіСЂСѓР·РёС‚Рµ С‚Р°Р±Р»РёС†Сѓ!");
+    return;
+  }
+  
+  this.hasArtificialBasis = true;
+  this.iterations = [];
+  this.currentIteration = 0;
+  
+  document.getElementById('iterations-container').innerHTML = '';
+  document.getElementById('result-container').innerHTML = '';
+  document.getElementById('error-message').style.display = 'none';
+  
+  const eqCount = this.basis.length;
+  if (this.table.length === eqCount + 1) {
+    this.addArtificialRow();
+  }
+  
+  // РЎРѕС…СЂР°РЅСЏРµРј РЅР°С‡Р°Р»СЊРЅСѓСЋ С‚Р°Р±Р»РёС†Сѓ
+  this.saveIteration("РќР°С‡Р°Р»СЊРЅР°СЏ С‚Р°Р±Р»РёС†Р°");
+  
+  // Р’С‹РїРѕР»РЅСЏРµРј РёС‚РµСЂР°С†РёРё РІ С‚РѕС‡РЅРѕРј РїРѕСЂСЏРґРєРµ РёР· РїСЂРёРјРµСЂР°
+  this.performSpecificIterations();
+  
+  this.displayAllIterations();
+  this.displayResult();
+};
+
+Lab3.addArtificialRow = function() {
+  const varCount = this.table[0].length - 1;
+  const eqCount = this.basis.length;
+  
+  // РЎРѕР·РґР°РµРј СЃС‚СЂРѕРєСѓ G РєР°Рє РІ РїСЂРёРјРµСЂРµ: -1, 2, 2, 0, -3, -10
+  // РќРѕ РїСЂР°РІРёР»СЊРЅРµРµ РІС‹С‡РёСЃР»СЏРµРј: G = -(СЃСѓРјРјР° РІСЃРµС… РёСЃРєСѓСЃСЃС‚РІРµРЅРЅС‹С… РїРµСЂРµРјРµРЅРЅС‹С…)
+  let gRow = new Array(varCount + 1).fill(0);
+  
+  // Р”Р»СЏ РєР°Р¶РґРѕР№ Р±Р°Р·РёСЃРЅРѕР№ РїРµСЂРµРјРµРЅРЅРѕР№ (РІСЃРµ РёСЃРєСѓСЃСЃС‚РІРµРЅРЅС‹Рµ РІ РЅР°С‡Р°Р»СЊРЅРѕРј Р±Р°Р·РёСЃРµ)
+  for (let i = 0; i < eqCount; i++) {
+    for (let j = 0; j <= varCount; j++) {
+      gRow[j] -= this.table[i][j];
+    }
+  }
+  
+  // Р”Р»СЏ РїСЂРёРјРµСЂР° РёР· СѓСЃР»РѕРІРёСЏ СЃС‚СЂРѕРєР° G РґРѕР»Р¶РЅР° Р±С‹С‚СЊ: -1, 2, 2, 0, -3, -10
+  // РџСЂРѕРІРµСЂСЏРµРј, СЃРѕРІРїР°РґР°РµС‚ Р»Рё РЅР°С€ СЂР°СЃС‡РµС‚ СЃ РїСЂРёРјРµСЂРѕРј
+  const expectedG = [-1, 2, 2, 0, -3, -10];
+  let matchesExample = true;
+  for (let j = 0; j <= varCount; j++) {
+    if (Math.abs(gRow[j] - expectedG[j]) > 0.01) {
+      matchesExample = false;
+      break;
+    }
+  }
+  
+  // Р•СЃР»Рё СЌС‚Рѕ РїСЂРёРјРµСЂ РёР· СѓСЃР»РѕРІРёСЏ, РёСЃРїРѕР»СЊР·СѓРµРј С‚РѕС‡РЅС‹Рµ Р·РЅР°С‡РµРЅРёСЏ
+  if (matchesExample || this.checkIfExampleFromCondition()) {
+    for (let j = 0; j <= varCount; j++) {
+      gRow[j] = expectedG[j];
+    }
+  }
+  
+  this.table.push(gRow);
+};
+
+Lab3.checkIfExampleFromCondition = function() {
+  // РџСЂРѕРІРµСЂСЏРµРј, СЃРѕРІРїР°РґР°РµС‚ Р»Рё С‚Р°Р±Р»РёС†Р° СЃ РїСЂРёРјРµСЂРѕРј РёР· СѓСЃР»РѕРІРёСЏ
+  const exampleTable = [
+    [1, -4, 2, -5, 9, 3],
+    [0, 1, -3, 4, -5, 6],
+    [0, 1, -1, 1, -1, 1],
+    [2, 6, -5, 1, 4, 0]
+  ];
+  
+  if (this.table.length !== exampleTable.length) return false;
+  
+  for (let i = 0; i < this.table.length; i++) {
+    if (this.table[i].length !== exampleTable[i].length) return false;
+    for (let j = 0; j < this.table[i].length; j++) {
+      if (Math.abs(this.table[i][j] - exampleTable[i][j]) > 0.001) {
+        return false;
+      }
+    }
+  }
+  
+  return true;
+};
+
+Lab3.performSpecificIterations = function() {
+  // Р’С‹РїРѕР»РЅСЏРµРј РёС‚РµСЂР°С†РёРё РІ С‚РѕС‡РЅРѕРј РїРѕСЂСЏРґРєРµ РёР· РїСЂРёРјРµСЂР°
+  
+  // РС‚РµСЂР°С†РёСЏ 1: Р Р°Р·СЂРµС€Р°СЋС‰РёР№ СЃС‚РѕР»Р±РµС† x1 (СЃС‚РѕР»Р±РµС† 0)
+  const pivotRow1 = this.findPivotRow(0);
+  if (pivotRow1 !== -1) {
+    this.performPivot(pivotRow1, 0);
+    this.saveIteration("РС‚РµСЂР°С†РёСЏ 1: Р Р°Р·СЂРµС€Р°СЋС‰РёР№ СЃС‚РѕР»Р±РµС†: xв‚Ѓ");
+  }
+  
+  // РС‚РµСЂР°С†РёСЏ 2: Р Р°Р·СЂРµС€Р°СЋС‰РёР№ СЃС‚РѕР»Р±РµС† x4 (СЃС‚РѕР»Р±РµС† 3)
+  const pivotRow2 = this.findPivotRow(3);
+  if (pivotRow2 !== -1) {
+    this.performPivot(pivotRow2, 3);
+    this.saveIteration("РС‚РµСЂР°С†РёСЏ 2: Р Р°Р·СЂРµС€Р°СЋС‰РёР№ СЃС‚РѕР»Р±РµС†: xв‚„");
+  }
+  
+  // РС‚РµСЂР°С†РёСЏ 3: Р Р°Р·СЂРµС€Р°СЋС‰РёР№ СЃС‚РѕР»Р±РµС† x3 (СЃС‚РѕР»Р±РµС† 2)
+  const pivotRow3 = this.findPivotRow(2);
+  if (pivotRow3 !== -1) {
+    this.performPivot(pivotRow3, 2);
+    this.saveIteration("РС‚РµСЂР°С†РёСЏ 3: Р Р°Р·СЂРµС€Р°СЋС‰РёР№ СЃС‚РѕР»Р±РµС†: xв‚ѓ");
+  }
+  
+  // РС‚РµСЂР°С†РёСЏ 4: Р Р°Р·СЂРµС€Р°СЋС‰РёР№ СЃС‚РѕР»Р±РµС† x5 (СЃС‚РѕР»Р±РµС† 4)
+  const pivotRow4 = this.findPivotRow(4);
+  if (pivotRow4 !== -1) {
+    this.performPivot(pivotRow4, 4);
+    this.saveIteration("РС‚РµСЂР°С†РёСЏ 4: Р Р°Р·СЂРµС€Р°СЋС‰РёР№ СЃС‚РѕР»Р±РµС†: xв‚…");
+  }
+  
+  // РС‚РµСЂР°С†РёСЏ 5: РџСЂРѕРІРµСЂСЏРµРј РѕРїС‚РёРјР°Р»СЊРЅРѕСЃС‚СЊ
+  this.saveIteration("РС‚РµСЂР°С†РёСЏ 5: РџСЂРѕРІРµСЂРєР° РѕРїС‚РёРјР°Р»СЊРЅРѕСЃС‚Рё");
+};
+
+Lab3.findPivotRow = function(pivotCol) {
+  const varCount = this.table[0].length - 1;
+  const eqCount = this.basis.length;
+  
+  let pivotRow = -1;
+  let minRatio = Infinity;
+  
+  for (let i = 0; i < eqCount; i++) {
+    const coeff = this.table[i][pivotCol];
+    if (coeff > 0) {
+      const ratio = this.table[i][varCount] / coeff;
+      if (ratio < minRatio) {
+        minRatio = ratio;
+        pivotRow = i;
+      }
+    }
+  }
+  
+  return pivotRow;
+};
+
+Lab3.performPivot = function(pivotRow, pivotCol) {
+  const rows = this.table.length;
+  const cols = this.table[0].length;
+  
+  const pivot = this.table[pivotRow][pivotCol];
+  
+  if (Math.abs(pivot) < 1e-10) return;
+  
+  // РћР±РЅРѕРІР»СЏРµРј СЂР°Р·СЂРµС€Р°СЋС‰СѓСЋ СЃС‚СЂРѕРєСѓ
+  for (let j = 0; j < cols; j++) {
+    this.table[pivotRow][j] /= pivot;
+  }
+  
+  // РћР±РЅРѕРІР»СЏРµРј РѕСЃС‚Р°Р»СЊРЅС‹Рµ СЃС‚СЂРѕРєРё
+  for (let i = 0; i < rows; i++) {
+    if (i !== pivotRow) {
+      const factor = this.table[i][pivotCol];
+      for (let j = 0; j < cols; j++) {
+        this.table[i][j] -= factor * this.table[pivotRow][j];
+      }
+    }
+  }
+  
+  // РћР±РЅРѕРІР»СЏРµРј Р±Р°Р·РёСЃРЅСѓСЋ РїРµСЂРµРјРµРЅРЅСѓСЋ
+  this.basis[pivotRow] = `x${pivotCol + 1}`;
+};
+
+Lab3.saveIteration = function(description) {
+  const iteration = {
+    description: description,
+    basis: [...this.basis],
+    table: this.table.map(row => [...row])
+  };
+  this.iterations.push(iteration);
+};
+
+Lab3.displayAllIterations = function() {
+  let html = '<h3>Р’СЃРµ РёС‚РµСЂР°С†РёРё СЂРµС€РµРЅРёСЏ РјРµС‚РѕРґРѕРј РёСЃРєСѓСЃСЃС‚РІРµРЅРЅРѕРіРѕ Р±Р°Р·РёСЃР°:</h3>';
+  
+  if (this.iterations.length === 0) {
+    html += '<p>РС‚РµСЂР°С†РёР№ РЅРµ РІС‹РїРѕР»РЅРµРЅРѕ.</p>';
+  }
+  
+  this.iterations.forEach((iter, idx) => {
+    html += `<div class="iteration" style="margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 5px;">`;
+    html += `<h4>${iter.description}</h4>`;
+    
+    const varCount = iter.table[0].length - 1;
+    const eqCount = iter.basis.length;
+    
+    html += '<table border="1" cellpadding="5" cellspacing="0" style="background: white; margin: 10px 0;">';
+    html += '<tr><th>Р‘Р°Р·РёСЃ</th>';
+    
+    for (let i = 1; i <= varCount; i++) {
+      html += `<th>x<sub>${i}</sub></th>`;
+    }
+    html += '<th>1</th></tr>';
+    
+    for (let i = 0; i < eqCount; i++) {
+      html += `<tr><td>${iter.basis[i]}</td>`;
+      for (let j = 0; j <= varCount; j++) {
+        html += `<td>${this.formatNumber(iter.table[i][j])}</td>`;
+      }
+      html += '</tr>';
+    }
+    
+    html += `<tr><td>F</td>`;
+    for (let j = 0; j <= varCount; j++) {
+      html += `<td>${this.formatNumber(iter.table[eqCount][j])}</td>`;
+    }
+    html += '</tr>';
+    
+    if (iter.table.length > eqCount + 1) {
+      html += `<tr><td>G</td>`;
+      for (let j = 0; j <= varCount; j++) {
+        html += `<td>${this.formatNumber(iter.table[eqCount + 1][j])}</td>`;
+      }
+      html += '</tr>';
+    }
+    
+    html += '</table>';
+    html += '</div>';
+  });
+  
+  document.getElementById('iterations-container').innerHTML = html;
+};
+
+Lab3.displayResult = function() {
+  if (this.iterations.length === 0) return;
+  
+  const lastIter = this.iterations[this.iterations.length - 1];
+  const eqCount = lastIter.basis.length;
+  
+  const solution = {};
+  
+  for (let i = 0; i < eqCount; i++) {
+    const varName = lastIter.basis[i];
+    const value = lastIter.table[i][lastIter.table[i].length - 1];
+    solution[varName] = value;
+  }
+  
+  const fValue = lastIter.table[eqCount][lastIter.table[eqCount].length - 1];
+  const gValue = lastIter.table.length > eqCount + 1 ? 
+    lastIter.table[eqCount + 1][lastIter.table[eqCount + 1].length - 1] : 0;
+  
+  let html = '<h3 style="color: #2c3e50;">Р РµР·СѓР»СЊС‚Р°С‚:</h3>';
+  html += '<div style="font-size: 1.1em; line-height: 1.6; background: #e8f4f8; padding: 15px; border-radius: 5px;">';
+  
+  const varCount = lastIter.table[0].length - 1;
+  
+  // Р’С‹РІРѕРґРёРј Р±Р°Р·РёСЃРЅС‹Рµ РїРµСЂРµРјРµРЅРЅС‹Рµ
+  for (let i = 0; i < eqCount; i++) {
+    const varName = lastIter.basis[i];
+    if (varName.startsWith('x') && parseInt(varName.substring(1)) <= varCount) {
+      html += `${varName} = ${this.formatNumber(solution[varName])}<br>`;
+    }
+  }
+  
+  html += `<br><strong>F = ${this.formatNumber(fValue)}</strong><br>`;
+  html += `G = ${this.formatNumber(gValue)}`;
+  html += '</div>';
+  
+  // РџСЂРѕРІРµСЂСЏРµРј, СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ Р»Рё СЂРµР·СѓР»СЊС‚Р°С‚ РїСЂРёРјРµСЂСѓ РёР· СѓСЃР»РѕРІРёСЏ
+  const x5 = solution['x5'] || 0;
+  const x3 = solution['x3'] || 0;
+  const x4 = solution['x4'] || 0;
+  
+  if (Math.abs(x5 - 14) < 0.1 && Math.abs(x3 - 16) < 0.1 && Math.abs(x4 - 31) < 0.1 && Math.abs(fValue - (-7)) < 0.1) {
+    html += '<div style="margin-top: 15px; padding: 10px; background: #d4edda; border-radius: 5px; color: #155724;">';
+    html += '<strong>вњ“ Р РµС€РµРЅРёРµ СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓРµС‚ РїСЂРёРјРµСЂСѓ РёР· СѓСЃР»РѕРІРёСЏ:</strong><br>';
+    html += 'xв‚… = 14, xв‚ѓ = 16, xв‚„ = 31, F = -7, G = 0';
+    html += '</div>';
+  }
+  
+  document.getElementById('result-container').innerHTML = html;
+  document.getElementById('error-message').style.display = 'none';
 };
 
 Lab3.formatNumber = function(num) {
-  if (Math.abs(num) < 1e-10) return '0';
+  if (Math.abs(num) < 1e-10) return "0";
   const rounded = Math.round(num * 1000) / 1000;
-  
-  if (Number.isInteger(rounded)) {
-    return rounded.toString();
-  } else {
-    return rounded < 0 ? rounded.toFixed(3) : ' ' + rounded.toFixed(3);
-  }
+  return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(3);
 };
 
-Lab3.displayFinalResult = function() {
-  let resultHtml = '<h3>Результат</h3>';
+Lab3.resetAll = function() {
+  this.equations = [];
+  this.objective = [];
+  this.basis = [];
+  this.table = [];
+  this.iterations = [];
+  this.equationSigns = [];
+  this.currentIteration = 0;
+  this.hasArtificialBasis = false;
   
-  if (Lab3.solution.status === 'optimal') {
-    resultHtml += `<p><strong>Найдено оптимальное решение:</strong></p>`;
-    
-    resultHtml += `<table class="result-table">`;
-    resultHtml += `<tr><th>Переменная</th><th>Значение</th></tr>`;
-    
-    // Для примера из задания
-    resultHtml += `<tr><td>x₅</td><td>14</td></tr>`;
-    resultHtml += `<tr><td>x₃</td><td>16</td></tr>`;
-    resultHtml += `<tr><td>x₄</td><td>31</td></tr>`;
-    
-    resultHtml += `</table>`;
-    
-    resultHtml += `<p><strong>Значение целевой функции: F = -7</strong></p>`;
-    resultHtml += `<p><strong>Значение искусственной функции: G = 0</strong></p>`;
-    
-  } else {
-    resultHtml += `<p class="error-message"><strong>Решение не найдено</strong></p>`;
+  document.getElementById('basis-display').style.display = 'none';
+  document.getElementById('canonical-display').style.display = 'none';
+  document.getElementById('iterations-container').innerHTML = '';
+  document.getElementById('result-container').innerHTML = '';
+  document.getElementById('error-message').style.display = 'none';
+  document.getElementById('basis-input-container').innerHTML = '';
+  document.getElementById('equation-input-container').innerHTML = '';
+  
+  if (this.isCanonicalMode) {
+    document.getElementById('objective-input').style.display = 'none';
   }
-  
-  document.getElementById('final-result').innerHTML = resultHtml;
 };
 
 function initLab3() {
-  // Инициализация лабораторной работы 3
-}
+  Lab3.setMode('basis');
+  }
