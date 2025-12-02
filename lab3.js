@@ -1,749 +1,342 @@
-// lab3.js - Метод искусственного базиса
+// lab3.js
 var Lab3 = {
-  equations: [],
-  objective: [],
+  currentTable: [],
   basis: [],
-  table: [],
-  artificialVars: [],
+  columnHeaders: [],
+  F: [],
+  G: [],
   iterations: [],
-  currentIteration: 0,
-  isCanonicalMode: false,
-  hasArtificialBasis: false,
-  equationSigns: []
+  phase: 1, // 1 for Phase I, 2 for Phase II
+  iterationCount: 0,
+  solution: null
 };
 
 function lab3Template() {
   return `
     <h2>Лабораторная 3: Метод искусственного базиса</h2>
-    
-    <div class="mode-selector">
-      <button class="mode-btn active" onclick="Lab3.setMode('basis')">Режим 1: Ввод базиса</button>
-      <button class="mode-btn" onclick="Lab3.setMode('canonical')">Режим 2: Ввод уравнений</button>
+    <p><strong>Пример:</strong> Система:<br>
+      x₁ - 4x₂ + 2x₃ - 5x₄ + 9x₅ = 3<br>
+      x₂ - 3x₃ + 4x₄ - 5x₅ = 6<br>
+      x₂ - x₃ + x₄ - x₅ = 1<br>
+      Целевая функция: F(x) = -2x₁ - 6x₂ + 5x₃ - x₄ - 4x₅ → max
+    </p>
+
+    <div class="input-group">
+      <label>Режим 1: Ввод базиса</label><br>
+      <label>Переменных:</label>
+      <input type="number" id="vars" value="5" min="1" max="20">
+      <label>Уравнений:</label>
+      <input type="number" id="eqs" value="3" min="1" max="20">
+      <button class="action" onclick="Lab3.setupBasis()">Создать</button>
     </div>
-    
-    <div id="input-section"></div>
-    
-    <div id="canonical-display" style="display: none; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;">
-      <h3>Канонический вид:</h3>
-      <div id="equations-text"></div>
-      <button class="action" onclick="Lab3.createBasisFromEquations()" style="margin-top: 10px;">Построить начальную таблицу</button>
+
+    <div class="input-group">
+      <label>Режим 2: Ввод уравнений</label><br>
+      <label>Уравнений:</label>
+      <input type="number" id="eqs2" value="3" min="1" max="20">
+      <label>Переменных:</label>
+      <input type="number" id="vars2" value="5" min="1" max="20">
+      <button class="action" onclick="Lab3.setupEquations()">Создать</button>
     </div>
+
+    <div id="basis-input" style="display: none;"></div>
+    <div id="equations-input" style="display: none;"></div>
     
-    <div id="basis-display" style="margin: 20px 0; display: none;">
-      <h3>Начальная симплекс-таблица (без искусственного базиса):</h3>
-      <div id="basis-table"></div>
-      <button class="action" onclick="Lab3.solveWithArtificialBasis()">Начать решение с искусственным базисом</button>
-      <button class="action" onclick="Lab3.resetAll()">Сброс</button>
+    <div class="controls">
+      <button class="action" onclick="Lab3.loadExample()">Загрузить пример</button>
+      <button class="action" onclick="Lab3.startSolving()">Начать решение</button>
+      <button class="action" onclick="Lab3.reset()">Сбросить</button>
     </div>
-    
-    <div id="iterations-container" style="margin-top: 30px;"></div>
-    
-    <div id="result-container" style="margin-top: 20px;"></div>
-    
-    <div id="error-message" style="display: none; margin-top: 20px; padding: 15px; background: #f8d7da; color: #721c24; border-radius: 5px; border: 1px solid #f5c6cb;"></div>
+
+    <div id="solution-output" style="margin-top: 20px; padding: 15px; background: #f0f8ff; border-radius: 5px; display: none;"></div>
+    <div id="iterations-container"></div>
   `;
 }
 
-Lab3.setMode = function(mode) {
-  const buttons = document.querySelectorAll('.mode-btn');
-  buttons.forEach(btn => btn.classList.remove('active'));
-  event.target.classList.add('active');
+Lab3.setupBasis = function() {
+  const vars = parseInt(document.getElementById("vars").value) || 5;
+  const eqs = parseInt(document.getElementById("eqs").value) || 3;
   
-  this.isCanonicalMode = (mode === 'canonical');
+  // Hide equations input
+  document.getElementById("equations-input").style.display = "none";
   
-  if (mode === 'basis') {
-    document.getElementById('input-section').innerHTML = `
-      <div class="input-group">
-        <h3>Введите начальную симплекс-таблицу (БЕЗ строки G)</h3>
-        <p>Пример (из условия) - начальная таблица БЕЗ искусственного базиса:</p>
-        <table border="1" cellpadding="5" cellspacing="0" style="margin: 10px 0; background: #f9f9f9;">
-          <tr><th>Базис</th><th>x₁</th><th>x₂</th><th>x₃</th><th>x₄</th><th>x₅</th><th>1</th></tr>
-          <tr><td>x₆</td><td>1</td><td>-4</td><td>2</td><td>-5</td><td>9</td><td>3</td></tr>
-          <tr><td>x₇</td><td>0</td><td>1</td><td>-3</td><td>4</td><td>-5</td><td>6</td></tr>
-          <tr><td>x₈</td><td>0</td><td>1</td><td>-1</td><td>1</td><td>-1</td><td>1</td></tr>
-          <tr><td>F</td><td>2</td><td>6</td><td>-5</td><td>1</td><td>4</td><td>0</td></tr>
-        </table>
-        <p><em>Строка G появится автоматически при решении методом искусственного базиса</em></p>
-        
-        <div class="matrix-setup">
-          <label>Количество переменных (без искусственных):</label>
-          <input type="number" id="var-count" value="5" min="2" max="10">
-          <label>Количество уравнений (базисных переменных):</label>
-          <input type="number" id="eq-count" value="3" min="1" max="10">
-          <button class="action" onclick="Lab3.createBasisInput()">Создать таблицу ввода</button>
-        </div>
-        
-        <div id="basis-input-container" style="margin-top: 20px;"></div>
-      </div>
-    `;
-  } else {
-    document.getElementById('input-section').innerHTML = `
-      <div class="input-group">
-        <h3>Введите систему уравнений</h3>
-        <p>Пример (из условия):</p>
-        <div style="background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px;">
-          x₁ - 4x₂ + 2x₃ - 5x₄ + 9x₅ = 3<br>
-          x₂ - 3x₃ + 4x₄ - 5x₅ = 6<br>
-          x₂ - x₃ + x₄ - x₅ = 1<br>
-          F(x) = -2x₁ - 6x₂ + 5x₃ - x₄ - 4x₅ → max
-        </div>
-        
-        <div class="equation-setup">
-          <label>Количество уравнений:</label>
-          <input type="number" id="canon-eq-count" value="3" min="1" max="10">
-          <label>Количество переменных:</label>
-          <input type="number" id="canon-var-count" value="5" min="2" max="10">
-          <button class="action" onclick="Lab3.createEquationInput()">Создать поля ввода</button>
-        </div>
-        
-        <div id="equation-input-container" style="margin-top: 20px;"></div>
-        
-        <div id="objective-input" style="margin-top: 20px; display: none;">
-          <h4>Целевая функция:</h4>
-          <div id="objective-coeffs"></div>
-          <label>Тип:</label>
-          <select id="objective-type">
-            <option value="max">Максимизация (max)</option>
-            <option value="min">Минимизация (min)</option>
-          </select>
-          <button class="action" onclick="Lab3.parseEquations()" style="margin-top: 10px;">Преобразовать в канонический вид</button>
-        </div>
-      </div>
-    `;
-  }
+  // Show basis input
+  let html = '<h3>Заполните исходную симплекс-таблицу</h3>';
+  html += '<p>Базисные переменные: ' + Array.from({length: eqs}, (_, i) => `x<sub>${vars + i + 1}</sub>`).join(', ') + '</p>';
+  html += '<p>Небазисные переменные: ' + Array.from({length: vars}, (_, i) => `x<sub>${i + 1}</sub>`).join(', ') + '</p>';
   
-  document.getElementById('basis-display').style.display = 'none';
-  document.getElementById('canonical-display').style.display = 'none';
-  document.getElementById('iterations-container').innerHTML = '';
-  document.getElementById('result-container').innerHTML = '';
-  document.getElementById('error-message').style.display = 'none';
-  this.hasArtificialBasis = false;
-};
-
-Lab3.showError = function(message) {
-  const errorDiv = document.getElementById('error-message');
-  errorDiv.innerHTML = `<strong>Ошибка:</strong> ${message}`;
-  errorDiv.style.display = 'block';
-  
-  setTimeout(() => {
-    errorDiv.style.display = 'none';
-  }, 5000);
-};
-
-Lab3.createEquationInput = function() {
-  const eqCount = parseInt(document.getElementById('canon-eq-count').value) || 3;
-  const varCount = parseInt(document.getElementById('canon-var-count').value) || 5;
-  
-  let html = '<h4>Уравнения (укажите знаки сравнения):</h4>';
-  
-  for (let i = 0; i < eqCount; i++) {
-    html += `<div class="equation-row" style="margin: 15px 0; padding: 15px; background: white; border-radius: 5px; border: 1px solid #ddd;">`;
-    html += `<strong>Уравнение ${i + 1}:</strong><br><div style="margin: 10px 0;">`;
-    
-    for (let j = 1; j <= varCount; j++) {
-      const defaultValue = this.getDefaultEquationValue(i, j - 1, varCount);
-      html += `<div style="display: inline-block; text-align: center; margin: 0 5px;">`;
-      html += `<input type="number" id="eq-${i}-coeff-${j}" value="${defaultValue}" step="any" style="width: 50px; display: block; margin: 0 auto;">`;
-      html += `<div style="font-size: 0.9em;">x<sub>${j}</sub></div>`;
-      html += `</div>`;
-      
-      if (j < varCount) {
-        html += `<span style="margin: 0 10px;">+</span>`;
-      }
-    }
-    
-    const defaultSign = i < 3 ? '=' : '≤';
-    html += `<select id="eq-${i}-sign" style="margin: 0 10px; padding: 5px;">`;
-    html += `<option value="=" ${defaultSign === '=' ? 'selected' : ''}>=</option>`;
-    html += `<option value="≤" ${defaultSign === '≤' ? 'selected' : ''}>≤</option>`;
-    html += `<option value="≥" ${defaultSign === '≥' ? 'selected' : ''}>≥</option>`;
-    html += `</select>`;
-    
-    html += `<input type="number" id="eq-${i}-const" value="${this.getDefaultConstant(i)}" step="any" style="width: 60px; padding: 5px;">`;
-    html += '</div></div>';
-  }
-  
-  document.getElementById('equation-input-container').innerHTML = html;
-  
-  let objHtml = '<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 5px;">F(x) = ';
-  for (let j = 1; j <= varCount; j++) {
-    const defaultValue = this.getDefaultObjectiveValue(j - 1, varCount);
-    objHtml += `<div style="display: inline-block; text-align: center;">`;
-    objHtml += `<input type="number" id="obj-coeff-${j}" value="${defaultValue}" step="any" style="width: 50px; display: block; margin: 0 auto;">`;
-    objHtml += `<div style="font-size: 0.9em;">x<sub>${j}</sub></div>`;
-    objHtml += `</div>`;
-    
-    if (j < varCount) {
-      objHtml += `<span style="margin: 0 5px;">+</span>`;
-    }
-  }
-  objHtml += '</div>';
-  
-  document.getElementById('objective-coeffs').innerHTML = objHtml;
-  document.getElementById('objective-input').style.display = 'block';
-};
-
-Lab3.parseEquations = function() {
-  const eqCount = parseInt(document.getElementById('canon-eq-count').value) || 3;
-  const varCount = parseInt(document.getElementById('canon-var-count').value) || 5;
-  
-  this.equations = [];
-  this.equationSigns = [];
-  
-  for (let i = 0; i < eqCount; i++) {
-    const eq = {
-      coefficients: [],
-      constant: 0,
-      sign: '='
-    };
-    
-    for (let j = 1; j <= varCount; j++) {
-      const coeff = parseFloat(document.getElementById(`eq-${i}-coeff-${j}`).value) || 0;
-      eq.coefficients.push(coeff);
-    }
-    
-    eq.constant = parseFloat(document.getElementById(`eq-${i}-const`).value) || 0;
-    eq.sign = document.getElementById(`eq-${i}-sign`).value;
-    this.equations.push(eq);
-    this.equationSigns.push(eq.sign);
-  }
-  
-  this.objective = [];
-  for (let j = 1; j <= varCount; j++) {
-    const coeff = parseFloat(document.getElementById(`obj-coeff-${j}`).value) || 0;
-    this.objective.push(coeff);
-  }
-  
-  this.renderCanonicalView();
-  document.getElementById('canonical-display').style.display = 'block';
-};
-
-Lab3.renderCanonicalView = function() {
-  let html = '<div style="font-family: monospace; line-height: 2.0;">';
-  
-  this.equations.forEach((eq, idx) => {
-    let eqStr = '<div style="margin: 10px 0;">';
-    let first = true;
-    
-    eq.coefficients.forEach((coeff, j) => {
-      if (Math.abs(coeff) > 1e-10 || first) {
-        if (!first) {
-          if (coeff >= 0) eqStr += ' + ';
-          else eqStr += ' - ';
-        } else {
-          if (coeff < 0) eqStr += '-';
-        }
-        
-        const absCoeff = Math.abs(coeff);
-        if (Math.abs(absCoeff - 1) > 1e-10 || (j === 0 && absCoeff === 1)) {
-          eqStr += `<span style="font-weight: bold; color: #2c3e50;">${absCoeff}</span>`;
-        }
-        
-        eqStr += `x<sub>${j + 1}</sub>`;
-        first = false;
-      }
-    });
-    
-    if (first) eqStr += '0';
-    
-    let signColor = '#2c3e50';
-    if (eq.sign === '≤') signColor = '#e74c3c';
-    if (eq.sign === '≥') signColor = '#3498db';
-    
-    eqStr += ` <span style="color: ${signColor}; font-weight: bold;">${eq.sign}</span> `;
-    eqStr += `<span style="font-weight: bold;">${eq.constant}</span>`;
-    eqStr += '</div>';
-    html += eqStr;
-  });
-  
-  html += '<div style="margin: 20px 0 10px 0; padding-top: 15px; border-top: 1px solid #ddd;">';
-  html += '<strong>Целевая функция:</strong><br>';
-  html += 'F(x) = ';
-  
-  let first = true;
-  this.objective.forEach((coeff, j) => {
-    if (Math.abs(coeff) > 1e-10 || first) {
-      if (!first) {
-        if (coeff >= 0) html += ' + ';
-        else html += ' - ';
-      } else {
-        if (coeff < 0) html += '-';
-      }
-      
-      const absCoeff = Math.abs(coeff);
-      if (Math.abs(absCoeff - 1) > 1e-10 || (j === 0 && absCoeff === 1)) {
-        html += `<span style="font-weight: bold; color: #2c3e50;">${absCoeff}</span>`;
-      }
-      
-      html += `x<sub>${j + 1}</sub>`;
-      first = false;
-    }
-  });
-  
-  if (first) html += '0';
-  
-  const objType = document.getElementById('objective-type').value;
-  const arrowColor = objType === 'max' ? '#27ae60' : '#e67e22';
-  html += ` <span style="color: ${arrowColor}; font-weight: bold;">→ ${objType}</span>`;
-  html += '</div></div>';
-  
-  document.getElementById('equations-text').innerHTML = html;
-};
-
-Lab3.createBasisFromEquations = function() {
-  const varCount = this.objective.length;
-  const eqCount = this.equations.length;
-  
-  if (eqCount === 0) {
-    this.showError("Сначала введите уравнения!");
-    return;
-  }
-  
-  this.table = [];
-  this.basis = [];
-  
-  for (let i = 0; i < eqCount; i++) {
-    const eq = this.equations[i];
-    const row = [...eq.coefficients, eq.constant];
-    this.table.push(row);
-    this.basis.push(`x${varCount + i + 1}`);
-  }
-  
-  const fRow = this.objective.map(x => -x);
-  fRow.push(0);
-  this.table.push(fRow);
-  
-  this.renderBasisTable();
-  document.getElementById('basis-display').style.display = 'block';
-  document.getElementById('error-message').style.display = 'none';
-};
-
-Lab3.createBasisInput = function() {
-  const varCount = parseInt(document.getElementById('var-count').value) || 5;
-  const eqCount = parseInt(document.getElementById('eq-count').value) || 3;
-  
-  let html = '<h4>Заполните таблицу (без строки G):</h4>';
-  html += '<table border="1" cellpadding="5" cellspacing="0" style="background: white;">';
+  html += '<table border="1" cellpadding="5" cellspacing="0" style="margin-top: 10px;">';
   html += '<tr><th>Базис</th>';
-  
-  for (let i = 1; i <= varCount; i++) {
-    html += `<th>x<sub>${i}</sub></th>`;
+  for (let j = 0; j < vars; j++) {
+    html += `<th>x<sub>${j + 1}</sub></th>`;
   }
-  html += '<th>1</th></tr>';
+  html += '<th>Свободный член</th></tr>';
   
-  for (let i = 0; i < eqCount; i++) {
-    html += `<tr><td>x<sub>${varCount + i + 1}</sub></td>`;
-    for (let j = 0; j <= varCount; j++) {
-      const defaultValue = this.getDefaultBasisValue(i, j, varCount);
-      html += `<td><input type="number" id="basis-cell-${i}-${j}" value="${defaultValue}" step="any" style="width: 50px;"></td>`;
+  for (let i = 0; i < eqs; i++) {
+    html += `<tr><td>x<sub>${vars + i + 1}</sub></td>`;
+    for (let j = 0; j < vars; j++) {
+      const val = Lab3.getDefault(i, j);
+      html += `<td><input type="number" id="cell-${i}-${j}" value="${val}" step="any" style="width:60px;"></td>`;
     }
+    const freeVal = Lab3.getDefaultFree(i);
+    html += `<td><input type="number" id="free-${i}" value="${freeVal}" step="any" style="width:60px;"></td>`;
     html += '</tr>';
   }
   
-  html += `<tr><td>F</td>`;
-  for (let j = 0; j <= varCount; j++) {
-    const defaultValue = this.getDefaultFValue(j, varCount);
-    html += `<td><input type="number" id="basis-f-${j}" value="${defaultValue}" step="any" style="width: 50px;"></td>`;
+  // F row
+  html += '<tr><td>F</td>';
+  for (let j = 0; j < vars; j++) {
+    const val = Lab3.getDefaultF(j);
+    html += `<td><input type="number" id="f-${j}" value="${val}" step="any" style="width:60px;"></td>`;
   }
-  html += '</tr>';
+  html += '<td><input type="number" id="f-free" value="0" step="any" style="width:60px;"></td></tr>';
+  
+  // G row (for Phase I)
+  html += '<tr><td>G</td>';
+  for (let j = 0; j < vars; j++) {
+    const val = Lab3.getDefaultG(j);
+    html += `<td><input type="number" id="g-${j}" value="${val}" step="any" style="width:60px;"></td>`;
+  }
+  const gFree = Lab3.getDefaultGFree();
+  html += `<td><input type="number" id="g-free" value="${gFree}" step="any" style="width:60px;"></td></tr>`;
   
   html += '</table>';
-  html += '<button class="action" onclick="Lab3.loadBasisTable()" style="margin-top: 10px;">Загрузить таблицу</button>';
+  html += '<button class="action" onclick="Lab3.loadBasisTable()">Загрузить таблицу</button>';
   
-  document.getElementById('basis-input-container').innerHTML = html;
+  document.getElementById("basis-input").innerHTML = html;
+  document.getElementById("basis-input").style.display = "block";
 };
 
-Lab3.getDefaultBasisValue = function(row, col, varCount) {
-  const example = [
-    [1, -4, 2, -5, 9, 3],
-    [0, 1, -3, 4, -5, 6],
-    [0, 1, -1, 1, -1, 1]
-  ];
+Lab3.setupEquations = function() {
+  const eqs = parseInt(document.getElementById("eqs2").value) || 3;
+  const vars = parseInt(document.getElementById("vars2").value) || 5;
   
-  if (row < example.length && col < example[row].length) {
-    return example[row][col];
+  // Hide basis input
+  document.getElementById("basis-input").style.display = "none";
+  
+  // Show equations input
+  let html = '<h3>Введите систему уравнений</h3>';
+  for (let i = 0; i < eqs; i++) {
+    html += `<div class="equation-row">`;
+    for (let j = 0; j < vars; j++) {
+      const val = Lab3.getDefault(i, j);
+      html += `<input type="number" id="eq-${i}-${j}" value="${val}" step="any" style="width:50px;"> x<sub>${j+1}</sub> `;
+      if (j < vars - 1) html += ' + ';
+    }
+    html += ' = ';
+    const freeVal = Lab3.getDefaultFree(i);
+    html += `<input type="number" id="eq-free-${i}" value="${freeVal}" step="any" style="width:50px;">`;
+    html += '</div>';
   }
-  return 0;
+  
+  // Objective function
+  html += '<h3>Целевая функция (для максимизации):</h3>';
+  html += '<div class="equation-row">';
+  for (let j = 0; j < vars; j++) {
+    const val = -Lab3.getDefaultF(j); // Note: F coefficients are negative of objective
+    html += `<input type="number" id="obj-${j}" value="${val}" step="any" style="width:50px;"> x<sub>${j+1}</sub> `;
+    if (j < vars - 1) html += ' + ';
+  }
+  html += '</div>';
+  html += '<button class="action" onclick="Lab3.loadEquations()">Создать таблицу</button>';
+  
+  document.getElementById("equations-input").innerHTML = html;
+  document.getElementById("equations-input").style.display = "block";
 };
 
-Lab3.getDefaultFValue = function(col, varCount) {
-  const example = [2, 6, -5, 1, 4, 0];
-  if (col < example.length) return example[col];
-  return 0;
-};
-
-Lab3.getDefaultEquationValue = function(eqIndex, varIndex, varCount) {
-  const examples = [
+// Default values for the example
+Lab3.getDefault = function(i, j) {
+  const example = [
     [1, -4, 2, -5, 9],
     [0, 1, -3, 4, -5],
     [0, 1, -1, 1, -1]
   ];
+  return example[i]?.[j] ?? 0;
+};
+
+Lab3.getDefaultFree = function(i) {
+  const example = [3, 6, 1];
+  return example[i] ?? 0;
+};
+
+Lab3.getDefaultF = function(j) {
+  const example = [2, 6, -5, 1, 4]; // Note: these are coefficients in F row, not objective
+  return example[j] ?? 0;
+};
+
+Lab3.getDefaultG = function(j) {
+  const example = [-1, 2, 2, 0, -3];
+  return example[j] ?? 0;
+};
+
+Lab3.getDefaultGFree = function() {
+  return -10;
+};
+
+Lab3.loadExample = function() {
+  // Set inputs to example values
+  document.getElementById("vars").value = 5;
+  document.getElementById("eqs").value = 3;
+  document.getElementById("vars2").value = 5;
+  document.getElementById("eqs2").value = 3;
   
-  if (eqIndex < examples.length && varIndex < examples[eqIndex].length) {
-    return examples[eqIndex][varIndex];
+  // Show basis input with example
+  Lab3.setupBasis();
+  
+  // Fill in the values
+  const eqs = 3;
+  const vars = 5;
+  for (let i = 0; i < eqs; i++) {
+    for (let j = 0; j < vars; j++) {
+      document.getElementById(`cell-${i}-${j}`).value = Lab3.getDefault(i, j);
+    }
+    document.getElementById(`free-${i}`).value = Lab3.getDefaultFree(i);
   }
-  return 0;
-};
-
-Lab3.getDefaultConstant = function(eqIndex) {
-  const examples = [3, 6, 1];
-  return examples[eqIndex] || 0;
-};
-
-Lab3.getDefaultObjectiveValue = function(varIndex, varCount) {
-  const example = [-2, -6, 5, -1, -4];
-  if (varIndex < example.length) return example[varIndex];
-  return 0;
+  
+  for (let j = 0; j < vars; j++) {
+    document.getElementById(`f-${j}`).value = Lab3.getDefaultF(j);
+    document.getElementById(`g-${j}`).value = Lab3.getDefaultG(j);
+  }
+  document.getElementById("f-free").value = 0;
+  document.getElementById("g-free").value = Lab3.getDefaultGFree();
 };
 
 Lab3.loadBasisTable = function() {
-  const varCount = parseInt(document.getElementById('var-count').value) || 5;
-  const eqCount = parseInt(document.getElementById('eq-count').value) || 3;
+  const vars = parseInt(document.getElementById("vars").value) || 5;
+  const eqs = parseInt(document.getElementById("eqs").value) || 3;
   
-  this.table = [];
-  this.basis = [];
+  // Initialize table
+  Lab3.currentTable = [];
+  Lab3.basis = Array.from({length: eqs}, (_, i) => `x${vars + i + 1}`);
+  Lab3.columnHeaders = Array.from({length: vars}, (_, i) => `x${i + 1}`);
+  Lab3.F = [];
+  Lab3.G = [];
   
-  for (let i = 0; i < eqCount; i++) {
+  // Load constraint rows
+  for (let i = 0; i < eqs; i++) {
     const row = [];
-    for (let j = 0; j <= varCount; j++) {
-      const val = parseFloat(document.getElementById(`basis-cell-${i}-${j}`).value) || 0;
+    for (let j = 0; j < vars; j++) {
+      let val = parseFloat(document.getElementById(`cell-${i}-${j}`).value);
+      if (isNaN(val)) val = 0;
       row.push(val);
     }
-    this.table.push(row);
-    this.basis.push(`x${varCount + i + 1}`);
+    let freeVal = parseFloat(document.getElementById(`free-${i}`).value);
+    if (isNaN(freeVal)) freeVal = 0;
+    row.push(freeVal);
+    Lab3.currentTable.push(row);
   }
   
-  const fRow = [];
-  for (let j = 0; j <= varCount; j++) {
-    const val = parseFloat(document.getElementById(`basis-f-${j}`).value) || 0;
-    fRow.push(val);
+  // Load F row
+  for (let j = 0; j < vars; j++) {
+    let val = parseFloat(document.getElementById(`f-${j}`).value);
+    if (isNaN(val)) val = 0;
+    Lab3.F.push(val);
   }
-  this.table.push(fRow);
+  let fFree = parseFloat(document.getElementById("f-free").value);
+  if (isNaN(fFree)) fFree = 0;
+  Lab3.F.push(fFree);
   
-  this.renderBasisTable();
-  document.getElementById('basis-display').style.display = 'block';
-  document.getElementById('error-message').style.display = 'none';
+  // Load G row
+  for (let j = 0; j < vars; j++) {
+    let val = parseFloat(document.getElementById(`g-${j}`).value);
+    if (isNaN(val)) val = 0;
+    Lab3.G.push(val);
+  }
+  let gFree = parseFloat(document.getElementById("g-free").value);
+    if (isNaN(gFree)) gFree = 0;
+  Lab3.G.push(gFree);
+  
+  // Store initial state
+  Lab3.iterations = [{
+    table: JSON.parse(JSON.stringify(Lab3.currentTable)),
+    basis: [...Lab3.basis],
+    headers: [...Lab3.columnHeaders],
+    F: [...Lab3.F],
+    G: [...Lab3.G],
+    phase: 1,
+    message: "Начальная симплекс-таблица"
+  }];
+  
+  Lab3.iterationCount = 0;
+  Lab3.phase = 1;
+  Lab3.solution = null;
+  Lab3.renderIterations();
 };
 
-Lab3.renderBasisTable = function() {
-  const varCount = this.table[0].length - 1;
-  const eqCount = this.basis.length;
+Lab3.loadEquations = function() {
+  const eqs = parseInt(document.getElementById("eqs2").value) || 3;
+  const vars = parseInt(document.getElementById("vars2").value) || 5;
   
-  let html = '<table border="1" cellpadding="5" cellspacing="0" style="background: white;">';
-  html += '<tr><th>Базис</th>';
+  // Initialize table
+  Lab3.currentTable = [];
+  Lab3.basis = Array.from({length: eqs}, (_, i) => `x${vars + i + 1}`);
+  Lab3.columnHeaders = Array.from({length: vars}, (_, i) => `x${i + 1}`);
+  Lab3.F = [];
+  Lab3.G = [];
   
-  for (let i = 1; i <= varCount; i++) {
-    html += `<th>x<sub>${i}</sub></th>`;
-  }
-  html += '<th>1</th></tr>';
-  
-  for (let i = 0; i < eqCount; i++) {
-    html += `<tr><td>${this.basis[i]}</td>`;
-    for (let j = 0; j <= varCount; j++) {
-      html += `<td>${this.formatNumber(this.table[i][j])}</td>`;
+  // Load constraint rows
+  for (let i = 0; i < eqs; i++) {
+    const row = [];
+    for (let j = 0; j < vars; j++) {
+      let val = parseFloat(document.getElementById(`eq-${i}-${j}`).value);
+      if (isNaN(val)) val = 0;
+      row.push(val);
     }
-    html += '</tr>';
+    let freeVal = parseFloat(document.getElementById(`eq-free-${i}`).value);
+    if (isNaN(freeVal)) freeVal = 0;
+    row.push(freeVal);
+    Lab3.currentTable.push(row);
   }
   
-  html += `<tr><td>F</td>`;
-  for (let j = 0; j <= varCount; j++) {
-    html += `<td>${this.formatNumber(this.table[eqCount][j])}</td>`;
+  // Build F row from objective function
+  // Note: In simplex, F row has coefficients opposite to objective
+  for (let j = 0; j < vars; j++) {
+    let objVal = parseFloat(document.getElementById(`obj-${j}`).value);
+    if (isNaN(objVal)) objVal = 0;
+    Lab3.F.push(-objVal); // Negative because we're maximizing
   }
-  html += '</tr>';
+  Lab3.F.push(0); // Free term for F
   
-  if (this.table.length > eqCount + 1) {
-    html += `<tr><td>G</td>`;
-    for (let j = 0; j <= varCount; j++) {
-      html += `<td>${this.formatNumber(this.table[eqCount + 1][j])}</td>`;
+  // Build G row for Phase I
+  // G = -sum of artificial variables
+  // Since artificial variables correspond to constraints, 
+  // G row = -sum of constraint rows
+  for (let j = 0; j < vars; j++) {
+    let gVal = 0;
+    for (let i = 0; i < eqs; i++) {
+      gVal -= Lab3.currentTable[i][j];
     }
-    html += '</tr>';
+    Lab3.G.push(gVal);
   }
+  let gFree = 0;
+  for (let i = 0; i < eqs; i++) {
+    gFree -= Lab3.currentTable[i][vars]; // vars is the index of free term
+  }
+  Lab3.G.push(gFree);
   
-  html += '</table>';
+  // Store initial state
+  Lab3.iterations = [{
+    table: JSON.parse(JSON.stringify(Lab3.currentTable)),
+    basis: [...Lab3.basis],
+    headers: [...Lab3.columnHeaders],
+    F: [...Lab3.F],
+    G: [...Lab3.G],
+    phase: 1,
+    message: "Начальная симплекс-таблица"
+  }];
   
-  document.getElementById('basis-table').innerHTML = html;
+  Lab3.iterationCount = 0;
+  Lab3.phase = 1;
+  Lab3.solution = null;
+  Lab3.renderIterations();
 };
 
-Lab3.solveWithArtificialBasis = function() {
-  if (!this.table.length) {
-    this.showError("Сначала загрузите таблицу!");
-    return;
+Lab3.formatVar = function(varName) {
+  if (varName.startsWith('x')) {
+    const index = varName.substring(1);
+    return `x<sub>${index}</sub>`;
   }
-  
-  this.hasArtificialBasis = true;
-  this.iterations = [];
-  this.currentIteration = 0;
-  
-  document.getElementById('iterations-container').innerHTML = '';
-  document.getElementById('result-container').innerHTML = '';
-  document.getElementById('error-message').style.display = 'none';
-  
-  const eqCount = this.basis.length;
-  if (this.table.length === eqCount + 1) {
-    this.addArtificialRow();
-  }
-  
-  // Сохраняем начальную таблицу
-  this.saveIteration("Начальная таблица");
-  
-  // Выполняем итерации в точном порядке из примера
-  this.performSpecificIterations();
-  
-  this.displayAllIterations();
-  this.displayResult();
-};
-
-Lab3.addArtificialRow = function() {
-  const varCount = this.table[0].length - 1;
-  const eqCount = this.basis.length;
-  
-  // Создаем строку G как в примере: -1, 2, 2, 0, -3, -10
-  // Но правильнее вычисляем: G = -(сумма всех искусственных переменных)
-  let gRow = new Array(varCount + 1).fill(0);
-  
-  // Для каждой базисной переменной (все искусственные в начальном базисе)
-  for (let i = 0; i < eqCount; i++) {
-    for (let j = 0; j <= varCount; j++) {
-      gRow[j] -= this.table[i][j];
-    }
-  }
-  
-  // Для примера из условия строка G должна быть: -1, 2, 2, 0, -3, -10
-  // Проверяем, совпадает ли наш расчет с примером
-  const expectedG = [-1, 2, 2, 0, -3, -10];
-  let matchesExample = true;
-  for (let j = 0; j <= varCount; j++) {
-    if (Math.abs(gRow[j] - expectedG[j]) > 0.01) {
-      matchesExample = false;
-      break;
-    }
-  }
-  
-  // Если это пример из условия, используем точные значения
-  if (matchesExample || this.checkIfExampleFromCondition()) {
-    for (let j = 0; j <= varCount; j++) {
-      gRow[j] = expectedG[j];
-    }
-  }
-  
-  this.table.push(gRow);
-};
-
-Lab3.checkIfExampleFromCondition = function() {
-  // Проверяем, совпадает ли таблица с примером из условия
-  const exampleTable = [
-    [1, -4, 2, -5, 9, 3],
-    [0, 1, -3, 4, -5, 6],
-    [0, 1, -1, 1, -1, 1],
-    [2, 6, -5, 1, 4, 0]
-  ];
-  
-  if (this.table.length !== exampleTable.length) return false;
-  
-  for (let i = 0; i < this.table.length; i++) {
-    if (this.table[i].length !== exampleTable[i].length) return false;
-    for (let j = 0; j < this.table[i].length; j++) {
-      if (Math.abs(this.table[i][j] - exampleTable[i][j]) > 0.001) {
-        return false;
-      }
-    }
-  }
-  
-  return true;
-};
-
-Lab3.performSpecificIterations = function() {
-  // Выполняем итерации в точном порядке из примера
-  
-  // Итерация 1: Разрешающий столбец x1 (столбец 0)
-  const pivotRow1 = this.findPivotRow(0);
-  if (pivotRow1 !== -1) {
-    this.performPivot(pivotRow1, 0);
-    this.saveIteration("Итерация 1: Разрешающий столбец: x₁");
-  }
-  
-  // Итерация 2: Разрешающий столбец x4 (столбец 3)
-  const pivotRow2 = this.findPivotRow(3);
-  if (pivotRow2 !== -1) {
-    this.performPivot(pivotRow2, 3);
-    this.saveIteration("Итерация 2: Разрешающий столбец: x₄");
-  }
-  
-  // Итерация 3: Разрешающий столбец x3 (столбец 2)
-  const pivotRow3 = this.findPivotRow(2);
-  if (pivotRow3 !== -1) {
-    this.performPivot(pivotRow3, 2);
-    this.saveIteration("Итерация 3: Разрешающий столбец: x₃");
-  }
-  
-  // Итерация 4: Разрешающий столбец x5 (столбец 4)
-  const pivotRow4 = this.findPivotRow(4);
-  if (pivotRow4 !== -1) {
-    this.performPivot(pivotRow4, 4);
-    this.saveIteration("Итерация 4: Разрешающий столбец: x₅");
-  }
-  
-  // Итерация 5: Проверяем оптимальность
-  this.saveIteration("Итерация 5: Проверка оптимальности");
-};
-
-Lab3.findPivotRow = function(pivotCol) {
-  const varCount = this.table[0].length - 1;
-  const eqCount = this.basis.length;
-  
-  let pivotRow = -1;
-  let minRatio = Infinity;
-  
-  for (let i = 0; i < eqCount; i++) {
-    const coeff = this.table[i][pivotCol];
-    if (coeff > 0) {
-      const ratio = this.table[i][varCount] / coeff;
-      if (ratio < minRatio) {
-        minRatio = ratio;
-        pivotRow = i;
-      }
-    }
-  }
-  
-  return pivotRow;
-};
-
-Lab3.performPivot = function(pivotRow, pivotCol) {
-  const rows = this.table.length;
-  const cols = this.table[0].length;
-  
-  const pivot = this.table[pivotRow][pivotCol];
-  
-  if (Math.abs(pivot) < 1e-10) return;
-  
-  // Обновляем разрешающую строку
-  for (let j = 0; j < cols; j++) {
-    this.table[pivotRow][j] /= pivot;
-  }
-  
-  // Обновляем остальные строки
-  for (let i = 0; i < rows; i++) {
-    if (i !== pivotRow) {
-      const factor = this.table[i][pivotCol];
-      for (let j = 0; j < cols; j++) {
-        this.table[i][j] -= factor * this.table[pivotRow][j];
-      }
-    }
-  }
-  
-  // Обновляем базисную переменную
-  this.basis[pivotRow] = `x${pivotCol + 1}`;
-};
-
-Lab3.saveIteration = function(description) {
-  const iteration = {
-    description: description,
-    basis: [...this.basis],
-    table: this.table.map(row => [...row])
-  };
-  this.iterations.push(iteration);
-};
-
-Lab3.displayAllIterations = function() {
-  let html = '<h3>Все итерации решения методом искусственного базиса:</h3>';
-  
-  if (this.iterations.length === 0) {
-    html += '<p>Итераций не выполнено.</p>';
-  }
-  
-  this.iterations.forEach((iter, idx) => {
-    html += `<div class="iteration" style="margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 5px;">`;
-    html += `<h4>${iter.description}</h4>`;
-    
-    const varCount = iter.table[0].length - 1;
-    const eqCount = iter.basis.length;
-    
-    html += '<table border="1" cellpadding="5" cellspacing="0" style="background: white; margin: 10px 0;">';
-    html += '<tr><th>Базис</th>';
-    
-    for (let i = 1; i <= varCount; i++) {
-      html += `<th>x<sub>${i}</sub></th>`;
-    }
-    html += '<th>1</th></tr>';
-    
-    for (let i = 0; i < eqCount; i++) {
-      html += `<tr><td>${iter.basis[i]}</td>`;
-      for (let j = 0; j <= varCount; j++) {
-        html += `<td>${this.formatNumber(iter.table[i][j])}</td>`;
-      }
-      html += '</tr>';
-    }
-    
-    html += `<tr><td>F</td>`;
-    for (let j = 0; j <= varCount; j++) {
-      html += `<td>${this.formatNumber(iter.table[eqCount][j])}</td>`;
-    }
-    html += '</tr>';
-    
-    if (iter.table.length > eqCount + 1) {
-      html += `<tr><td>G</td>`;
-      for (let j = 0; j <= varCount; j++) {
-        html += `<td>${this.formatNumber(iter.table[eqCount + 1][j])}</td>`;
-      }
-      html += '</tr>';
-    }
-    
-    html += '</table>';
-    html += '</div>';
-  });
-  
-  document.getElementById('iterations-container').innerHTML = html;
-};
-
-Lab3.displayResult = function() {
-  if (this.iterations.length === 0) return;
-  
-  const lastIter = this.iterations[this.iterations.length - 1];
-  const eqCount = lastIter.basis.length;
-  
-  const solution = {};
-  
-  for (let i = 0; i < eqCount; i++) {
-    const varName = lastIter.basis[i];
-    const value = lastIter.table[i][lastIter.table[i].length - 1];
-    solution[varName] = value;
-  }
-  
-  const fValue = lastIter.table[eqCount][lastIter.table[eqCount].length - 1];
-  const gValue = lastIter.table.length > eqCount + 1 ? 
-    lastIter.table[eqCount + 1][lastIter.table[eqCount + 1].length - 1] : 0;
-  
-  let html = '<h3 style="color: #2c3e50;">Результат:</h3>';
-  html += '<div style="font-size: 1.1em; line-height: 1.6; background: #e8f4f8; padding: 15px; border-radius: 5px;">';
-  
-  const varCount = lastIter.table[0].length - 1;
-  
-  // Выводим базисные переменные
-  for (let i = 0; i < eqCount; i++) {
-    const varName = lastIter.basis[i];
-    if (varName.startsWith('x') && parseInt(varName.substring(1)) <= varCount) {
-      html += `${varName} = ${this.formatNumber(solution[varName])}<br>`;
-    }
-  }
-  
-  html += `<br><strong>F = ${this.formatNumber(fValue)}</strong><br>`;
-  html += `G = ${this.formatNumber(gValue)}`;
-  html += '</div>';
-  
-  // Проверяем, соответствует ли результат примеру из условия
-  const x5 = solution['x5'] || 0;
-  const x3 = solution['x3'] || 0;
-  const x4 = solution['x4'] || 0;
-  
-  if (Math.abs(x5 - 14) < 0.1 && Math.abs(x3 - 16) < 0.1 && Math.abs(x4 - 31) < 0.1 && Math.abs(fValue - (-7)) < 0.1) {
-    html += '<div style="margin-top: 15px; padding: 10px; background: #d4edda; border-radius: 5px; color: #155724;">';
-    html += '<strong>✓ Решение соответствует примеру из условия:</strong><br>';
-    html += 'x₅ = 14, x₃ = 16, x₄ = 31, F = -7, G = 0';
-    html += '</div>';
-  }
-  
-  document.getElementById('result-container').innerHTML = html;
-  document.getElementById('error-message').style.display = 'none';
+  return varName;
 };
 
 Lab3.formatNumber = function(num) {
@@ -752,29 +345,401 @@ Lab3.formatNumber = function(num) {
   return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(3);
 };
 
-Lab3.resetAll = function() {
-  this.equations = [];
-  this.objective = [];
-  this.basis = [];
-  this.table = [];
-  this.iterations = [];
-  this.equationSigns = [];
-  this.currentIteration = 0;
-  this.hasArtificialBasis = false;
+Lab3.renderTable = function(iteration) {
+  const { table, basis, headers, F, G, phase, message } = iteration;
+  const vars = headers.length;
+  const eqs = basis.length;
   
-  document.getElementById('basis-display').style.display = 'none';
-  document.getElementById('canonical-display').style.display = 'none';
-  document.getElementById('iterations-container').innerHTML = '';
-  document.getElementById('result-container').innerHTML = '';
-  document.getElementById('error-message').style.display = 'none';
-  document.getElementById('basis-input-container').innerHTML = '';
-  document.getElementById('equation-input-container').innerHTML = '';
+  let html = `<h3>${message}</h3>`;
+  html += `<p>Фаза: ${phase === 1 ? 'I' : 'II'}</p>`;
   
-  if (this.isCanonicalMode) {
-    document.getElementById('objective-input').style.display = 'none';
+  html += '<table border="1" cellpadding="5" cellspacing="0" style="margin: 10px 0;">';
+  html += '<tr><th>Базис</th>';
+  
+  // Column headers
+  headers.forEach(header => {
+    html += `<th>${Lab3.formatVar(header)}</th>`;
+  });
+  html += '<th>Свободный член</th></tr>';
+  
+  // Constraint rows
+  for (let i = 0; i < eqs; i++) {
+    html += `<tr><td>${Lab3.formatVar(basis[i])}</td>`;
+    for (let j = 0; j < vars; j++) {
+      html += `<td>${Lab3.formatNumber(table[i][j])}</td>`;
+    }
+    html += `<td>${Lab3.formatNumber(table[i][vars])}</td></tr>`;
+  }
+  
+  // F row
+  html += `<tr><td>F</td>`;
+  for (let j = 0; j < vars; j++) {
+    html += `<td>${Lab3.formatNumber(F[j])}</td>`;
+  }
+  html += `<td>${Lab3.formatNumber(F[vars])}</td></tr>`;
+  
+  // G row (only in Phase I)
+  if (phase === 1) {
+    html += `<tr><td>G</td>`;
+    for (let j = 0; j < vars; j++) {
+      html += `<td>${Lab3.formatNumber(G[j])}</td>`;
+    }
+    html += `<td>${Lab3.formatNumber(G[vars])}</td></tr>`;
+  }
+  
+  html += '</table>';
+  return html;
+};
+
+Lab3.renderIterations = function() {
+  const container = document.getElementById("iterations-container");
+  container.innerHTML = '';
+  
+  Lab3.iterations.forEach((iteration, index) => {
+    const div = document.createElement("div");
+    div.className = "iteration";
+    div.innerHTML = `<h3>Итерация ${index}</h3>` + Lab3.renderTable(iteration);
+    container.appendChild(div);
+  });
+  
+  // Show solution if available
+  if (Lab3.solution) {
+    const solutionDiv = document.getElementById("solution-output");
+    solutionDiv.style.display = "block";
+    let solutionHtml = `<h3>Решение:</h3>`;
+    
+    // Show basis values
+    solutionHtml += "<p>Базисные переменные:</p><ul>";
+    for (const [varName, value] of Object.entries(Lab3.solution.basisValues)) {
+      solutionHtml += `<li>${Lab3.formatVar(varName)} = ${Lab3.formatNumber(value)}</li>`;
+    }
+    solutionHtml += "</ul>";
+    
+    // Show non-basis values (all zero)
+    solutionHtml += "<p>Небазисные переменные (равны 0):</p><ul>";
+    for (const varName of Lab3.solution.nonBasis) {
+      solutionHtml += `<li>${Lab3.formatVar(varName)} = 0</li>`;
+    }
+    solutionHtml += "</ul>";
+    
+    solutionHtml += `<p>Значение целевой функции F: ${Lab3.formatNumber(Lab3.solution.F)}</p>`;
+    if (Lab3.solution.G !== undefined) {
+      solutionHtml += `<p>Значение вспомогательной функции G: ${Lab3.formatNumber(Lab3.solution.G)}</p>`;
+    }
+    
+    solutionDiv.innerHTML = solutionHtml;
+  } else {
+    document.getElementById("solution-output").style.display = "none";
   }
 };
 
+Lab3.startSolving = function() {
+  if (Lab3.iterations.length === 0) {
+    alert("Сначала загрузите таблицу!");
+    return;
+  }
+  
+  // Reset to initial state
+  const initial = Lab3.iterations[0];
+  Lab3.currentTable = JSON.parse(JSON.stringify(initial.table));
+  Lab3.basis = [...initial.basis];
+  Lab3.columnHeaders = [...initial.headers];
+  Lab3.F = [...initial.F];
+  Lab3.G = [...initial.G];
+  Lab3.phase = initial.phase;
+  Lab3.iterationCount = 0;
+  Lab3.iterations = [initial];
+  Lab3.solution = null;
+  
+  // Solve step by step
+  let solved = false;
+  while (!solved) {
+    if (Lab3.phase === 1) {
+      solved = Lab3.solvePhaseI();
+    } else {
+      solved = Lab3.solvePhaseII();
+    }
+    
+    // If we made a step, render it
+    if (!solved && Lab3.iterations.length > Lab3.iterationCount) {
+      Lab3.iterationCount = Lab3.iterations.length - 1;
+      Lab3.renderIterations();
+    }
+  }
+  
+  // Final render
+  Lab3.renderIterations();
+};
+
+Lab3.solvePhaseI = function() {
+  const vars = Lab3.columnHeaders.length;
+  const eqs = Lab3.basis.length;
+  
+  // Check if Phase I is complete (G = 0 and all artificial vars out of basis)
+  let gFree = Lab3.G[vars];
+  if (Math.abs(gFree) < 1e-10) {
+    // Check if any artificial variables are in basis
+    const artificialVars = Lab3.basis.filter(varName => {
+      const index = parseInt(varName.substring(1));
+      return index > vars; // Artificial variables have indices > original variables
+    });
+    
+    if (artificialVars.length === 0) {
+      // Phase I complete, move to Phase II
+      Lab3.phase = 2;
+      Lab3.iterations.push({
+        table: JSON.parse(JSON.stringify(Lab3.currentTable)),
+        basis: [...Lab3.basis],
+        headers: [...Lab3.columnHeaders],
+        F: [...Lab3.F],
+        G: [...Lab3.G],
+        phase: 2,
+        message: "Фаза I завершена: Все искусственные переменные вышли из базиса, и значение вспомогательной функции G равно 0. Переходим к Фазе II."
+      });
+      return false; // Continue to Phase II
+    }
+  }
+  
+  // Find entering variable (most negative in G row for minimization)
+  // But since we're using G = -sum(artificial), we want to maximize G
+  // So we look for positive coefficients in G row (for non-artificial columns)
+  let enteringCol = -1;
+  let maxG = -Infinity;
+  for (let j = 0; j < vars; j++) {
+    // Skip if this column corresponds to an artificial variable
+    if (parseInt(Lab3.columnHeaders[j].substring(1)) > vars) {
+      continue;
+    }
+    
+    if (Lab3.G[j] > maxG) {
+      maxG = Lab3.G[j];
+      enteringCol = j;
+    }
+  }
+  
+  // If no positive coefficients, optimal for Phase I
+  if (maxG <= 1e-10) {
+    // Check if G = 0
+    if (Math.abs(gFree) < 1e-10) {
+      Lab3.phase = 2;
+      Lab3.iterations.push({
+        table: JSON.parse(JSON.stringify(Lab3.currentTable)),
+        basis: [...Lab3.basis],
+        headers: [...Lab3.columnHeaders],
+        F: [...Lab3.F],
+        G: [...Lab3.G],
+        phase: 2,
+        message: "Фаза I завершена: значение вспомогательной функции G равно 0. Переходим к Фазе II."
+      });
+      return false;
+    } else {
+      // Infeasible problem
+      Lab3.solution = { error: "Задача не имеет допустимого решения (G ≠ 0 в оптимуме Фазы I)" };
+      return true;
+    }
+  }
+  
+  // Find leaving variable (minimum ratio test)
+  let leavingRow = -1;
+  let minRatio = Infinity;
+  for (let i = 0; i < eqs; i++) {
+    if (Lab3.currentTable[i][enteringCol] > 1e-10) {
+      const ratio = Lab3.currentTable[i][vars] / Lab3.currentTable[i][enteringCol];
+      if (ratio < minRatio) {
+        minRatio = ratio;
+        leavingRow = i;
+      }
+    }
+  }
+  
+  if (leavingRow === -1) {
+    // Unbounded problem
+    Lab3.solution = { error: "Задача не ограничена (в Фазе I)" };
+    return true;
+  }
+  
+  // Perform pivot
+  Lab3.pivot(leavingRow, enteringCol, true);
+  
+  // Create message
+  const enteringVar = Lab3.columnHeaders[enteringCol];
+  const leavingVar = Lab3.basis[leavingRow];
+  const pivotElement = Lab3.currentTable[leavingRow][enteringCol];
+  
+  Lab3.iterations.push({
+    table: JSON.parse(JSON.stringify(Lab3.currentTable)),
+    basis: [...Lab3.basis],
+    headers: [...Lab3.columnHeaders],
+    F: [...Lab3.F],
+    G: [...Lab3.G],
+    phase: 1,
+    message: `Итерация ${Lab3.iterationCount + 1}<br>
+      Входящая переменная: ${Lab3.formatVar(enteringVar)} (разрешающий столбец)<br>
+      Выходящая переменная: ${Lab3.formatVar(leavingVar)} (разрешающая строка)<br>
+      Опорный элемент: ${Lab3.formatNumber(pivotElement)}`
+  });
+  
+  Lab3.iterationCount++;
+  return false; // Continue
+};
+
+Lab3.solvePhaseII = function() {
+  const vars = Lab3.columnHeaders.length;
+  const eqs = Lab3.basis.length;
+  
+  // Find entering variable (most positive in F row for maximization)
+  let enteringCol = -1;
+  let maxF = -Infinity;
+  for (let j = 0; j < vars; j++) {
+    // Skip if this column corresponds to an artificial variable
+    if (parseInt(Lab3.columnHeaders[j].substring(1)) > vars) {
+      continue;
+    }
+    
+    if (Lab3.F[j] > maxF) {
+      maxF = Lab3.F[j];
+      enteringCol = j;
+    }
+  }
+  
+  // If no positive coefficients, optimal solution found
+  if (maxF <= 1e-10) {
+    // Build solution
+    const basisValues = {};
+    const nonBasis = [];
+    
+    // Basis variables
+    for (let i = 0; i < eqs; i++) {
+      const varName = Lab3.basis[i];
+      // Only include original variables (not artificial)
+      if (parseInt(varName.substring(1)) <= vars) {
+        basisValues[varName] = Lab3.currentTable[i][vars];
+      }
+    }
+    
+    // Non-basis variables
+    for (const header of Lab3.columnHeaders) {
+      if (parseInt(header.substring(1)) <= vars) {
+        nonBasis.push(header);
+      }
+    }
+    
+    Lab3.solution = {
+      basisValues: basisValues,
+      nonBasis: nonBasis,
+      F: Lab3.F[vars],
+      G: Lab3.G[vars]
+    };
+    
+    Lab3.iterations.push({
+      table: JSON.parse(JSON.stringify(Lab3.currentTable)),
+      basis: [...Lab3.basis],
+      headers: [...Lab3.columnHeaders],
+      F: [...Lab3.F],
+      G: [...Lab3.G],
+      phase: 2,
+      message: "Оптимальное решение найдено."
+    });
+    
+    return true; // Done
+  }
+  
+  // Find leaving variable (minimum ratio test)
+  let leavingRow = -1;
+  let minRatio = Infinity;
+  for (let i = 0; i < eqs; i++) {
+    if (Lab3.currentTable[i][enteringCol] > 1e-10) {
+      const ratio = Lab3.currentTable[i][vars] / Lab3.currentTable[i][enteringCol];
+      if (ratio < minRatio) {
+        minRatio = ratio;
+        leavingRow = i;
+      }
+    }
+  }
+  
+  if (leavingRow === -1) {
+    // Unbounded problem
+    Lab3.solution = { error: "Задача не ограничена (в Фазе II)" };
+    return true;
+  }
+  
+  // Perform pivot
+  Lab3.pivot(leavingRow, enteringCol, false);
+  
+  // Create message
+  const enteringVar = Lab3.columnHeaders[enteringCol];
+  const leavingVar = Lab3.basis[leavingRow];
+  const pivotElement = Lab3.currentTable[leavingRow][enteringCol];
+  
+  Lab3.iterations.push({
+    table: JSON.parse(JSON.stringify(Lab3.currentTable)),
+    basis: [...Lab3.basis],
+    headers: [...Lab3.columnHeaders],
+    F: [...Lab3.F],
+    G: [...Lab3.G],
+    phase: 2,
+    message: `Итерация ${Lab3.iterationCount + 1}<br>
+      Входящая переменная: ${Lab3.formatVar(enteringVar)} (разрешающий столбец)<br>
+      Выходящая переменная: ${Lab3.formatVar(leavingVar)} (разрешающая строка)<br>
+      Опорный элемент: ${Lab3.formatNumber(pivotElement)}`
+  });
+  
+  Lab3.iterationCount++;
+  return false; // Continue
+};
+
+Lab3.pivot = function(leavingRow, enteringCol, isPhaseI) {
+  const vars = Lab3.columnHeaders.length;
+  const eqs = Lab3.basis.length;
+  const pivotElement = Lab3.currentTable[leavingRow][enteringCol];
+  
+  // Normalize pivot row
+  for (let j = 0; j <= vars; j++) {
+    Lab3.currentTable[leavingRow][j] /= pivotElement;
+  }
+  
+  // Update other rows
+  for (let i = 0; i < eqs; i++) {
+    if (i !== leavingRow) {
+      const factor = Lab3.currentTable[i][enteringCol];
+      for (let j = 0; j <= vars; j++) {
+        Lab3.currentTable[i][j] -= factor * Lab3.currentTable[leavingRow][j];
+      }
+    }
+  }
+  
+  // Update F row
+  const fFactor = Lab3.F[enteringCol];
+  for (let j = 0; j <= vars; j++) {
+    Lab3.F[j] -= fFactor * Lab3.currentTable[leavingRow][j];
+  }
+  
+  // Update G row (only in Phase I)
+  if (isPhaseI) {
+    const gFactor = Lab3.G[enteringCol];
+    for (let j = 0; j <= vars; j++) {
+      Lab3.G[j] -= gFactor * Lab3.currentTable[leavingRow][j];
+    }
+  }
+  
+  // Update basis and column headers
+  const enteringVar = Lab3.columnHeaders[enteringCol];
+  const leavingVar = Lab3.basis[leavingRow];
+  
+  Lab3.basis[leavingRow] = enteringVar;
+  Lab3.columnHeaders[enteringCol] = leavingVar;
+};
+
+Lab3.reset = function() {
+  document.getElementById("basis-input").style.display = "none";
+  document.getElementById("equations-input").style.display = "none";
+  document.getElementById("iterations-container").innerHTML = "";
+  document.getElementById("solution-output").style.display = "none";
+  Lab3.iterations = [];
+  Lab3.solution = null;
+};
+
 function initLab3() {
-  Lab3.setMode('basis');
-}
+  // Initialize with example
+  Lab3.loadExample();
+    }
