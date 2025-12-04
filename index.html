@@ -4,8 +4,88 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Лабораторные работы по линейному программированию</title>
-  <!-- Подключаем внешний CSS -->
-  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f9f9f9;
+    }
+    header {
+      background-color: #2c3e50;
+      color: white;
+      padding: 15px 20px;
+      text-align: center;
+    }
+    main {
+      display: flex;
+      padding: 20px;
+      gap: 20px;
+    }
+    .labs-menu {
+      width: 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .labs-menu button {
+      padding: 12px;
+      text-align: left;
+      border: 1px solid #ccc;
+      background: #ecf0f1;
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.2s;
+    }
+    .labs-menu button:hover {
+      background: #d5dbdb;
+    }
+    #lab-container {
+      flex: 1;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    .input-group {
+      margin: 15px 0;
+    }
+    .input-group label {
+      margin-right: 10px;
+      font-weight: bold;
+    }
+    .input-group input {
+      padding: 5px;
+      width: 60px;
+      margin-right: 10px;
+    }
+    .action {
+      padding: 8px 16px;
+      background-color: #3498db;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin: 5px 5px 5px 0;
+    }
+    .action:hover {
+      background-color: #2980b9;
+    }
+    .controls {
+      margin-top: 20px;
+    }
+    table {
+      margin: 10px 0;
+    }
+    @media (max-width: 768px) {
+      main {
+        flex-direction: column;
+      }
+      .labs-menu {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
 
@@ -15,16 +95,16 @@
 
   <main>
     <nav class="labs-menu">
-      <button onclick="openLab(1)">Лаба 1: Модифицированные жордановы исключения</button>
-      <button onclick="openLab(2)">Лаба 2: Решение систем линейных уравнений</button>
-      <button onclick="openLab(3)">Лаба 3: Метод искусственного базиса</button>
-      <button onclick="openLab(4)">Лаба 4: </button>
+      <button onclick="openLab(1)">Лаба 1: Модифицированные ЖИ</button>
+      <button onclick="openLab(2)">Лаба 2: Системы уравнений</button>
+      <button onclick="openLab(3)">Лаба 3: Искусственный базис</button>
+      <button onclick="openLab(4)">Лаба 4: Транспортная задача</button>
     </nav>
 
     <div id="lab-container"></div>
   </main>
 
-  <!-- Подключаем JS-файлы -->
+  <!-- Подключение JS-файлов -->
   <script src="lab1.js"></script>
   <script src="lab2.js"></script>
   <script src="lab3.js"></script>
@@ -40,24 +120,29 @@
           container.innerHTML = lab1Template();
           initLab1();
         } else {
-          container.innerHTML = '<h2>Лабораторная 1</h2><p>Файл lab1.js не подключен или не реализован.</p>';
+          container.innerHTML = '<h2>Лабораторная 1</h2><p>Файл lab1.js не подключен.</p>';
         }
       } else if (num === 2) {
         if (typeof lab2Template === 'function') {
           container.innerHTML = lab2Template();
           initLab2();
         } else {
-          container.innerHTML = '<h2>Лабораторная 2</h2><p>Файл lab2.js не подключен или не реализован.</p>';
+          container.innerHTML = '<h2>Лабораторная 2</h2><p>Файл lab2.js не подключен.</p>';
         }
       } else if (num === 3) {
         if (typeof lab3Template === 'function') {
           container.innerHTML = lab3Template();
           initLab3();
         } else {
-          container.innerHTML = '<h2>Лабораторная 3: Метод искусственного базиса</h2><p>Файл lab3.js не подключен или не реализован.</p>';
+          container.innerHTML = '<h2>Лабораторная 3</h2><p>Файл lab3.js не подключен.</p>';
         }
       } else if (num === 4) {
-        container.innerHTML = '<h2>Лабораторная 4:</h2><p>В разработке...</p>';
+        if (typeof lab4Template === 'function') {
+          container.innerHTML = lab4Template();
+          initLab4();
+        } else {
+          container.innerHTML = '<h2>Лабораторная 4</h2><p>Файл lab4.js не подключен.</p>';
+        }
       }
     }
 

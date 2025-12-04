@@ -1,780 +1,948 @@
-// lab3.js - Метод искусственного базиса
 var Lab3 = {
-  equations: [],
-  objective: [],
-  basis: [],
-  table: [],
-  artificialVars: [],
-  iterations: [],
-  currentIteration: 0,
-  isCanonicalMode: false,
-  hasArtificialBasis: false,
-  equationSigns: []
+  currentMatrix: null,
+  iteration: 0,
+  maxIterations: 10,
+  mode: "max",
+  status: "init",
+  inputMode: 1,
+  stepHistory: []
 };
 
 function lab3Template() {
   return `
-    <h2>Лабораторная 3: Метод искусственного базиса</h2>
-    
-    <div class="mode-selector">
-      <button class="mode-btn active" onclick="Lab3.setMode('basis')">Режим 1: Ввод базиса</button>
-      <button class="mode-btn" onclick="Lab3.setMode('canonical')">Режим 2: Ввод уравнений</button>
+    <h2>Лабораторная 3: Метод искусственного базиса (М-метод)</h2>
+
+    <div class="input-group">
+      <label><input type="radio" name="lab3-mode" value="1" checked onchange="Lab3.switchMode(1)"> Режим 1: Ввод базиса (таблицы)</label>
+      <label><input type="radio" name="lab3-mode" value="2" onchange="Lab3.switchMode(2)"> Режим 2: Ввод уравнений</label>
     </div>
-    
-    <div id="input-section"></div>
-    
-    <div id="canonical-display" style="display: none; margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;">
-      <h3>Канонический вид:</h3>
-      <div id="equations-text"></div>
-      <button class="action" onclick="Lab3.createBasisFromEquations()" style="margin-top: 10px;">Построить начальную таблицу</button>
+
+    <div id="lab3-mode-content"></div>
+    <div id="lab3-output-container"></div>
+
+    <div class="controls">
+      <button class="action" onclick="Lab3.step()">Следующий шаг</button>
+      <button class="action" onclick="Lab3.solveAll()">Решить до конца</button>
+      <button class="action" onclick="Lab3.reset()">Сбросить</button>
+      <button class="action" onclick="Lab3.loadExample1()">Пример 1: /button>
+      <button class="action" onclick="Lab3.loadExample2()">Пример 2: </button>
     </div>
-    
-    <div id="basis-display" style="margin: 20px 0; display: none;">
-      <h3>Начальная симплекс-таблица (без искусственного базиса):</h3>
-      <div id="basis-table"></div>
-      <button class="action" onclick="Lab3.solveWithArtificialBasis()">Начать решение с искусственным базисом</button>
-      <button class="action" onclick="Lab3.resetAll()">Сброс</button>
-    </div>
-    
-    <div id="iterations-container" style="margin-top: 30px;"></div>
-    
-    <div id="result-container" style="margin-top: 20px;"></div>
-    
-    <div id="error-message" style="display: none; margin-top: 20px; padding: 15px; background: #f8d7da; color: #721c24; border-radius: 5px; border: 1px solid #f5c6cb;"></div>
   `;
 }
 
-Lab3.setMode = function(mode) {
-  const buttons = document.querySelectorAll('.mode-btn');
-  buttons.forEach(btn => btn.classList.remove('active'));
-  event.target.classList.add('active');
-  
-  this.isCanonicalMode = (mode === 'canonical');
-  
-  if (mode === 'basis') {
-    document.getElementById('input-section').innerHTML = `
-      <div class="input-group">
-        <h3>Введите начальную симплекс-таблицу (БЕЗ строки G)</h3>
-        <p>Пример (из условия) - начальная таблица БЕЗ искусственного базиса:</p>
-        <table border="1" cellpadding="5" cellspacing="0" style="margin: 10px 0; background: #f9f9f9;">
-          <tr><th>Базис</th><th>x₁</th><th>x₂</th><th>x₃</th><th>x₄</th><th>x₅</th><th>1</th></tr>
-          <tr><td>x₆</td><td>1</td><td>-4</td><td>2</td><td>-5</td><td>9</td><td>3</td></tr>
-          <tr><td>x₇</td><td>0</td><td>1</td><td>-3</td><td>4</td><td>-5</td><td>6</td></tr>
-          <tr><td>x₈</td><td>0</td><td>1</td><td>-1</td><td>1</td><td>-1</td><td>1</td></tr>
-          <tr><td>F</td><td>2</td><td>6</td><td>-5</td><td>1</td><td>4</td><td>0</td></tr>
-        </table>
-        <p><em>Строка G появится автоматически при решении методом искусственного базиса</em></p>
-        
-        <div class="matrix-setup">
-          <label>Количество переменных (без искусственных):</label>
-          <input type="number" id="var-count" value="5" min="2" max="10">
-          <label>Количество уравнений (базисных переменных):</label>
-          <input type="number" id="eq-count" value="3" min="1" max="10">
-          <button class="action" onclick="Lab3.createBasisInput()">Создать таблицу ввода</button>
-        </div>
-        
-        <div id="basis-input-container" style="margin-top: 20px;"></div>
-      </div>
-    `;
+Lab3.switchMode = function (mode) {
+  Lab3.inputMode = mode;
+  Lab3.reset();
+  if (mode === 1) {
+    Lab3.renderMode1();
   } else {
-    document.getElementById('input-section').innerHTML = `
-      <div class="input-group">
-        <h3>Введите систему уравнений</h3>
-        <p>Пример (из условия):</p>
-        <div style="background: #f9f9f9; padding: 15px; margin: 10px 0; border-radius: 5px;">
-          x₁ - 4x₂ + 2x₃ - 5x₄ + 9x₅ = 3<br>
-          x₂ - 3x₃ + 4x₄ - 5x₅ = 6<br>
-          x₂ - x₃ + x₄ - x₅ = 1<br>
-          F(x) = -2x₁ - 6x₂ + 5x₃ - x₄ - 4x₅ → max
-        </div>
-        
-        <div class="equation-setup">
-          <label>Количество уравнений:</label>
-          <input type="number" id="canon-eq-count" value="3" min="1" max="10">
-          <label>Количество переменных:</label>
-          <input type="number" id="canon-var-count" value="5" min="2" max="10">
-          <button class="action" onclick="Lab3.createEquationInput()">Создать поля ввода</button>
-        </div>
-        
-        <div id="equation-input-container" style="margin-top: 20px;"></div>
-        
-        <div id="objective-input" style="margin-top: 20px; display: none;">
-          <h4>Целевая функция:</h4>
-          <div id="objective-coeffs"></div>
-          <label>Тип:</label>
-          <select id="objective-type">
-            <option value="max">Максимизация (max)</option>
-            <option value="min">Минимизация (min)</option>
-          </select>
-          <button class="action" onclick="Lab3.parseEquations()" style="margin-top: 10px;">Преобразовать в канонический вид</button>
-        </div>
-      </div>
-    `;
+    Lab3.renderMode2();
   }
-  
-  document.getElementById('basis-display').style.display = 'none';
-  document.getElementById('canonical-display').style.display = 'none';
-  document.getElementById('iterations-container').innerHTML = '';
-  document.getElementById('result-container').innerHTML = '';
-  document.getElementById('error-message').style.display = 'none';
-  this.hasArtificialBasis = false;
 };
 
-Lab3.showError = function(message) {
-  const errorDiv = document.getElementById('error-message');
-  errorDiv.innerHTML = `<strong>Ошибка:</strong> ${message}`;
-  errorDiv.style.display = 'block';
-  
-  setTimeout(() => {
-    errorDiv.style.display = 'none';
-  }, 5000);
+Lab3.renderMode1 = function () {
+  document.getElementById("lab3-mode-content").innerHTML = `
+    <h3>Режим 1: Ввод базисной таблицы</h3>
+    <div class="input-group">
+      <label>Направление:</label>
+      <select id="lab3-mode1-optimization" style="width:80px;">
+        <option value="max">max</option>
+        <option value="min">min</option>
+      </select>
+      <label>Число строк:</label>
+      <input type="number" id="lab3-rows1" value="3" min="1" max="8" style="width:60px;">
+      <label>Число переменных:</label>
+      <input type="number" id="lab3-vars1" value="2" min="1" max="6" style="width:60px;">
+      <button class="action" onclick="Lab3.setupInputMatrix1()">Создать таблицу</button>
+    </div>
+    <div id="lab3-matrix-input1"></div>
+  `;
+  document.getElementById("lab3-output-container").innerHTML = "";
 };
 
-Lab3.createEquationInput = function() {
-  const eqCount = parseInt(document.getElementById('canon-eq-count').value) || 3;
-  const varCount = parseInt(document.getElementById('canon-var-count').value) || 5;
-  
-  let html = '<h4>Уравнения (укажите знаки сравнения):</h4>';
-  
-  for (let i = 0; i < eqCount; i++) {
-    html += `<div class="equation-row" style="margin: 15px 0; padding: 15px; background: white; border-radius: 5px; border: 1px solid #ddd;">`;
-    html += `<strong>Уравнение ${i + 1}:</strong><br><div style="margin: 10px 0;">`;
-    
-    for (let j = 1; j <= varCount; j++) {
-      const defaultValue = this.getDefaultEquationValue(i, j - 1, varCount);
-      html += `<div style="display: inline-block; text-align: center; margin: 0 5px;">`;
-      html += `<input type="number" id="eq-${i}-coeff-${j}" value="${defaultValue}" step="any" style="width: 50px; display: block; margin: 0 auto;">`;
-      html += `<div style="font-size: 0.9em;">x<sub>${j}</sub></div>`;
-      html += `</div>`;
-      
-      if (j < varCount) {
-        html += `<span style="margin: 0 10px;">+</span>`;
-      }
-    }
-    
-    const defaultSign = i < 3 ? '=' : '≤';
-    html += `<select id="eq-${i}-sign" style="margin: 0 10px; padding: 5px;">`;
-    html += `<option value="=" ${defaultSign === '=' ? 'selected' : ''}>=</option>`;
-    html += `<option value="≤" ${defaultSign === '≤' ? 'selected' : ''}>≤</option>`;
-    html += `<option value="≥" ${defaultSign === '≥' ? 'selected' : ''}>≥</option>`;
-    html += `</select>`;
-    
-    html += `<input type="number" id="eq-${i}-const" value="${this.getDefaultConstant(i)}" step="any" style="width: 60px; padding: 5px;">`;
-    html += '</div></div>';
-  }
-  
-  document.getElementById('equation-input-container').innerHTML = html;
-  
-  let objHtml = '<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 5px;">F(x) = ';
-  for (let j = 1; j <= varCount; j++) {
-    const defaultValue = this.getDefaultObjectiveValue(j - 1, varCount);
-    objHtml += `<div style="display: inline-block; text-align: center;">`;
-    objHtml += `<input type="number" id="obj-coeff-${j}" value="${defaultValue}" step="any" style="width: 50px; display: block; margin: 0 auto;">`;
-    objHtml += `<div style="font-size: 0.9em;">x<sub>${j}</sub></div>`;
-    objHtml += `</div>`;
-    
-    if (j < varCount) {
-      objHtml += `<span style="margin: 0 5px;">+</span>`;
-    }
-  }
-  objHtml += '</div>';
-  
-  document.getElementById('objective-coeffs').innerHTML = objHtml;
-  document.getElementById('objective-input').style.display = 'block';
+Lab3.renderMode2 = function () {
+  document.getElementById("lab3-mode-content").innerHTML = `
+    <h3>Режим 2: Ввод уравнений</h3>
+    <div class="input-group">
+      <label>Направление:</label>
+      <select id="lab3-mode2-optimization" style="width:80px;">
+        <option value="max">max</option>
+        <option value="min">min</option>
+      </select>
+      <label>Число уравнений:</label>
+      <input type="number" id="lab3-eqs" value="3" min="1" max="6" style="width:60px;">
+      <label>Число переменных:</label>
+      <input type="number" id="lab3-vars2" value="5" min="1" max="6" style="width:60px;">
+      <button class="action" onclick="Lab3.setupInputEquations()">Создать уравнения</button>
+    </div>
+    <div id="lab3-equations-input"></div>
+  `;
+  document.getElementById("lab3-output-container").innerHTML = "";
 };
 
-Lab3.parseEquations = function() {
-  const eqCount = parseInt(document.getElementById('canon-eq-count').value) || 3;
-  const varCount = parseInt(document.getElementById('canon-var-count').value) || 5;
-  
-  this.equations = [];
-  this.equationSigns = [];
-  
-  for (let i = 0; i < eqCount; i++) {
-    const eq = {
-      coefficients: [],
-      constant: 0,
-      sign: '='
-    };
-    
-    for (let j = 1; j <= varCount; j++) {
-      const coeff = parseFloat(document.getElementById(`eq-${i}-coeff-${j}`).value) || 0;
-      eq.coefficients.push(coeff);
-    }
-    
-    eq.constant = parseFloat(document.getElementById(`eq-${i}-const`).value) || 0;
-    eq.sign = document.getElementById(`eq-${i}-sign`).value;
-    this.equations.push(eq);
-    this.equationSigns.push(eq.sign);
-  }
-  
-  this.objective = [];
-  for (let j = 1; j <= varCount; j++) {
-    const coeff = parseFloat(document.getElementById(`obj-coeff-${j}`).value) || 0;
-    this.objective.push(coeff);
-  }
-  
-  this.renderCanonicalView();
-  document.getElementById('canonical-display').style.display = 'block';
+Lab3.reset = function () {
+  Lab3.currentMatrix = null;
+  Lab3.iteration = 0;
+  Lab3.status = "init";
+  Lab3.stepHistory = [];
+  document.getElementById("lab3-output-container").innerHTML = "";
 };
 
-Lab3.renderCanonicalView = function() {
-  let html = '<div style="font-family: monospace; line-height: 2.0;">';
-  
-  this.equations.forEach((eq, idx) => {
-    let eqStr = '<div style="margin: 10px 0;">';
-    let first = true;
-    
-    eq.coefficients.forEach((coeff, j) => {
-      if (Math.abs(coeff) > 1e-10 || first) {
-        if (!first) {
-          if (coeff >= 0) eqStr += ' + ';
-          else eqStr += ' - ';
-        } else {
-          if (coeff < 0) eqStr += '-';
-        }
-        
-        const absCoeff = Math.abs(coeff);
-        if (Math.abs(absCoeff - 1) > 1e-10 || (j === 0 && absCoeff === 1)) {
-          eqStr += `<span style="font-weight: bold; color: #2c3e50;">${absCoeff}</span>`;
-        }
-        
-        eqStr += `x<sub>${j + 1}</sub>`;
-        first = false;
-      }
-    });
-    
-    if (first) eqStr += '0';
-    
-    let signColor = '#2c3e50';
-    if (eq.sign === '≤') signColor = '#e74c3c';
-    if (eq.sign === '≥') signColor = '#3498db';
-    
-    eqStr += ` <span style="color: ${signColor}; font-weight: bold;">${eq.sign}</span> `;
-    eqStr += `<span style="font-weight: bold;">${eq.constant}</span>`;
-    eqStr += '</div>';
-    html += eqStr;
-  });
-  
-  html += '<div style="margin: 20px 0 10px 0; padding-top: 15px; border-top: 1px solid #ddd;">';
-  html += '<strong>Целевая функция:</strong><br>';
-  html += 'F(x) = ';
-  
-  let first = true;
-  this.objective.forEach((coeff, j) => {
-    if (Math.abs(coeff) > 1e-10 || first) {
-      if (!first) {
-        if (coeff >= 0) html += ' + ';
-        else html += ' - ';
-      } else {
-        if (coeff < 0) html += '-';
-      }
-      
-      const absCoeff = Math.abs(coeff);
-      if (Math.abs(absCoeff - 1) > 1e-10 || (j === 0 && absCoeff === 1)) {
-        html += `<span style="font-weight: bold; color: #2c3e50;">${absCoeff}</span>`;
-      }
-      
-      html += `x<sub>${j + 1}</sub>`;
-      first = false;
-    }
-  });
-  
-  if (first) html += '0';
-  
-  const objType = document.getElementById('objective-type').value;
-  const arrowColor = objType === 'max' ? '#27ae60' : '#e67e22';
-  html += ` <span style="color: ${arrowColor}; font-weight: bold;">→ ${objType}</span>`;
-  html += '</div></div>';
-  
-  document.getElementById('equations-text').innerHTML = html;
+Lab3.appendOutput = function (html) {
+  var container = document.getElementById("lab3-output-container");
+  container.innerHTML += html;
 };
 
-Lab3.createBasisFromEquations = function() {
-  const varCount = this.objective.length;
-  const eqCount = this.equations.length;
-  
-  if (eqCount === 0) {
-    this.showError("Сначала введите уравнения!");
-    return;
-  }
-  
-  this.table = [];
-  this.basis = [];
-  
-  for (let i = 0; i < eqCount; i++) {
-    const eq = this.equations[i];
-    const row = [...eq.coefficients, eq.constant];
-    this.table.push(row);
-    this.basis.push(`x${varCount + i + 1}`);
-  }
-  
-  const fRow = this.objective.map(x => -x);
-  fRow.push(0);
-  this.table.push(fRow);
-  
-  this.renderBasisTable();
-  document.getElementById('basis-display').style.display = 'block';
-  document.getElementById('error-message').style.display = 'none';
-};
+// =============== Режим 1 ===============
+Lab3.setupInputMatrix1 = function () {
+  const m = parseInt(document.getElementById("lab3-rows1").value) || 3;
+  const n = parseInt(document.getElementById("lab3-vars1").value) || 2;
+  const mode = document.getElementById("lab3-mode1-optimization").value || "max";
 
-Lab3.createBasisInput = function() {
-  const varCount = parseInt(document.getElementById('var-count').value) || 5;
-  const eqCount = parseInt(document.getElementById('eq-count').value) || 3;
+  let html = '<h4>Введите матрицу (направление: ' + mode + ')</h4><table border="1" cellpadding="6" cellspacing="0">';
   
-  let html = '<h4>Заполните таблицу (без строки G):</h4>';
-  html += '<table border="1" cellpadding="5" cellspacing="0" style="background: white;">';
-  html += '<tr><th>Базис</th>';
-  
-  for (let i = 1; i <= varCount; i++) {
-    html += `<th>x<sub>${i}</sub></th>`;
-  }
-  html += '<th>1</th></tr>';
-  
-  for (let i = 0; i < eqCount; i++) {
-    html += `<tr><td>x<sub>${varCount + i + 1}</sub></td>`;
-    for (let j = 0; j <= varCount; j++) {
-      const defaultValue = this.getDefaultBasisValue(i, j, varCount);
-      html += `<td><input type="number" id="basis-cell-${i}-${j}" value="${defaultValue}" step="any" style="width: 50px;"></td>`;
+  // Заголовки столбцов
+  html += '<tr><th></th><th>b (св.члены)</th>';
+  for (let j = 1; j <= n; j++) html += `<th>x<sub>${j}</sub></th>`;
+  html += '</tr>';
+
+  // Строки ограничений
+  for (let i = 0; i < m; i++) {
+    html += `<tr><td>Огр. ${i + 1}</td>`;
+    for (let j = 0; j <= n; j++) {
+      const def = (j === 0) ? (i * 10 + 10) : (i === j - 1 ? 1 : 0);
+      html += `<td><input type="number" id="m1-${i}-${j}" value="${def}" step="any" style="width:70px;"></td>`;
     }
     html += '</tr>';
   }
   
-  html += `<tr><td>F</td>`;
-  for (let j = 0; j <= varCount; j++) {
-    const defaultValue = this.getDefaultFValue(j, varCount);
-    html += `<td><input type="number" id="basis-f-${j}" value="${defaultValue}" step="any" style="width: 50px;"></td>`;
+  // Строка целевой функции F
+  html += `<tr><td><strong>F (${mode})</strong></td>`;
+  // Первый столбец (свободный член) для F
+  html += `<td><input type="number" id="m1-f-0" value="0" step="any" style="width:70px;"></td>`;
+  
+  // Коэффициенты при переменных для F
+  for (let j = 1; j <= n; j++) {
+    const def = mode === "max" ? j : -j;
+    html += `<td><input type="number" id="m1-f-${j}" value="${def}" step="any" style="width:70px;"></td>`;
   }
-  html += '</tr>';
+  html += '</tr></table>';
   
-  html += '</table>';
-  html += '<button class="action" onclick="Lab3.loadBasisTable()" style="margin-top: 10px;">Загрузить таблицу</button>';
-  
-  document.getElementById('basis-input-container').innerHTML = html;
+  html += '<button class="action" onclick="Lab3.loadMatrixMode1()">Построить М-таблицу</button>';
+
+  document.getElementById("lab3-matrix-input1").innerHTML = html;
 };
 
-Lab3.getDefaultBasisValue = function(row, col, varCount) {
-  const example = [
-    [1, -4, 2, -5, 9, 3],
-    [0, 1, -3, 4, -5, 6],
-    [0, 1, -1, 1, -1, 1]
-  ];
+Lab3.loadMatrixMode1 = function () {
+  const m = parseInt(document.getElementById("lab3-rows1").value) || 3;
+  const n = parseInt(document.getElementById("lab3-vars1").value) || 2;
+  Lab3.mode = document.getElementById("lab3-mode1-optimization").value || "max";
+
+  const b = [], A = [], f = [];
   
-  if (row < example.length && col < example[row].length) {
-    return example[row][col];
-  }
-  return 0;
-};
-
-Lab3.getDefaultFValue = function(col, varCount) {
-  const example = [2, 6, -5, 1, 4, 0];
-  if (col < example.length) return example[col];
-  return 0;
-};
-
-Lab3.getDefaultEquationValue = function(eqIndex, varIndex, varCount) {
-  const examples = [
-    [1, -4, 2, -5, 9],
-    [0, 1, -3, 4, -5],
-    [0, 1, -1, 1, -1]
-  ];
-  
-  if (eqIndex < examples.length && varIndex < examples[eqIndex].length) {
-    return examples[eqIndex][varIndex];
-  }
-  return 0;
-};
-
-Lab3.getDefaultConstant = function(eqIndex) {
-  const examples = [3, 6, 1];
-  return examples[eqIndex] || 0;
-};
-
-Lab3.getDefaultObjectiveValue = function(varIndex, varCount) {
-  const example = [-2, -6, 5, -1, -4];
-  if (varIndex < example.length) return example[varIndex];
-  return 0;
-};
-
-Lab3.loadBasisTable = function() {
-  const varCount = parseInt(document.getElementById('var-count').value) || 5;
-  const eqCount = parseInt(document.getElementById('eq-count').value) || 3;
-  
-  this.table = [];
-  this.basis = [];
-  
-  for (let i = 0; i < eqCount; i++) {
+  // Чтение ограничений
+  for (let i = 0; i < m; i++) {
+    b.push(parseFloat(document.getElementById(`m1-${i}-0`).value) || 0);
     const row = [];
-    for (let j = 0; j <= varCount; j++) {
-      const val = parseFloat(document.getElementById(`basis-cell-${i}-${j}`).value) || 0;
-      row.push(val);
+    for (let j = 1; j <= n; j++) {
+      row.push(parseFloat(document.getElementById(`m1-${i}-${j}`).value) || 0);
     }
-    this.table.push(row);
-    this.basis.push(`x${varCount + i + 1}`);
+    A.push(row);
   }
   
-  const fRow = [];
-  for (let j = 0; j <= varCount; j++) {
-    const val = parseFloat(document.getElementById(`basis-f-${j}`).value) || 0;
-    fRow.push(val);
+  // Чтение целевой функции
+  const f0 = parseFloat(document.getElementById(`m1-f-0`).value) || 0;
+  for (let j = 1; j <= n; j++) {
+    f.push(parseFloat(document.getElementById(`m1-f-${j}`).value) || 0);
   }
-  this.table.push(fRow);
-  
-  this.renderBasisTable();
-  document.getElementById('basis-display').style.display = 'block';
-  document.getElementById('error-message').style.display = 'none';
+
+  Lab3.buildMTableFromData(m, n, A, b, f, f0);
 };
 
-Lab3.renderBasisTable = function() {
-  const varCount = this.table[0].length - 1;
-  const eqCount = this.basis.length;
-  
-  let html = '<table border="1" cellpadding="5" cellspacing="0" style="background: white;">';
-  html += '<tr><th>Базис</th>';
-  
-  for (let i = 1; i <= varCount; i++) {
-    html += `<th>x<sub>${i}</sub></th>`;
-  }
-  html += '<th>1</th></tr>';
-  
-  for (let i = 0; i < eqCount; i++) {
-    html += `<tr><td>${this.basis[i]}</td>`;
-    for (let j = 0; j <= varCount; j++) {
-      html += `<td>${this.formatNumber(this.table[i][j])}</td>`;
+// =============== Режим 2 ===============
+Lab3.setupInputEquations = function () {
+  const eqs = parseInt(document.getElementById("lab3-eqs").value) || 3;
+  const n = parseInt(document.getElementById("lab3-vars2").value) || 5;
+  const mode = document.getElementById("lab3-mode2-optimization").value || "max";
+
+  let html = '<h4>Введите уравнения (направление: ' + mode + ')</h4><table border="1" cellpadding="6" cellspacing="0">';
+  for (let i = 0; i < eqs; i++) {
+    html += `<tr><td>Ур. ${i + 1}:</td>`;
+    for (let j = 0; j < n; j++) {
+      const def = (i === j) ? 1 : 0;
+      html += `<td><input type="number" id="eq-${i}-${j}" value="${def}" step="any" style="width:60px;">x<sub>${j + 1}</sub></td>`;
     }
-    html += '</tr>';
+    html += `<td>
+        <select id="eq-sign-${i}" style="width:60px;">
+          <option value="le">≤</option>
+          <option value="ge">≥</option>
+          <option value="eq">=</option>
+        </select>
+      </td>`;
+    html += `<td><input type="number" id="eq-b-${i}" value="${3 + i * 3}" step="any" style="width:70px;"></td></tr>`;
+  }
+  html += `<tr><td><strong>F (${mode})</strong>:</td>`;
+  html += '<td><input type="number" id="eq-f0" value="0" step="any" style="width:60px;"></td>';
+  for (let j = 0; j < n; j++) {
+    const def = (mode === "max") ? 1 : -1;
+    html += `<td><input type="number" id="eq-f-${j}" value="${def}" step="any" style="width:60px;">x<sub>${j + 1}</sub></td>`;
+  }
+  html += '<td colspan="2"></td></tr></table>';
+  html += '<button class="action" onclick="Lab3.loadEquationsMode2()">Привести к каноническому виду</button>';
+
+  document.getElementById("lab3-equations-input").innerHTML = html;
+};
+
+Lab3.formatEquation = function (coeffs, sign, b, varCount) {
+  let terms = [];
+  for (let j = 0; j < varCount; j++) {
+    let c = coeffs[j];
+    if (Math.abs(c) < 1e-10) continue;
+    let signStr = c >= 0 ? "+" : "-";
+    let absC = Math.abs(c);
+    let numStr = (absC === 1) ? "" : absC.toString();
+    let term = signStr + numStr + "x" + (j + 1);
+    if (terms.length === 0 && c > 0) term = numStr + "x" + (j + 1);
+    terms.push(term);
+  }
+  let left = terms.join(" ").replace(/^\+/, "");
+  let signMap = { le: "≤", ge: "≥", eq: "=" };
+  return `${left} ${signMap[sign]} ${b}`;
+};
+
+Lab3.loadEquationsMode2 = function () {
+  const eqs = parseInt(document.getElementById("lab3-eqs").value) || 3;
+  const n = parseInt(document.getElementById("lab3-vars2").value) || 5;
+  Lab3.mode = document.getElementById("lab3-mode2-optimization").value || "max";
+
+  const A = [], b = [], signs = [], f = [];
+  for (let i = 0; i < eqs; i++) {
+    const row = [];
+    for (let j = 0; j < n; j++) {
+      row.push(parseFloat(document.getElementById(`eq-${i}-${j}`).value) || 0);
+    }
+    A.push(row);
+    b.push(parseFloat(document.getElementById(`eq-b-${i}`).value) || 0);
+    signs.push(document.getElementById(`eq-sign-${i}`).value);
   }
   
-  html += `<tr><td>F</td>`;
-  for (let j = 0; j <= varCount; j++) {
-    html += `<td>${this.formatNumber(this.table[eqCount][j])}</td>`;
+  const f0 = parseFloat(document.getElementById(`eq-f0`).value) || 0;
+  for (let j = 0; j < n; j++) {
+    f.push(parseFloat(document.getElementById(`eq-f-${j}`).value) || 0);
+  }
+
+  let direction = (Lab3.mode === "max") ? "Максимизировать" : "Минимизировать";
+  let originalEqHTML = '<h3>Исходная задача:</h3><p><strong>' + direction + '</strong><br>F = ';
+  
+  // Добавляем свободный член, если он не нулевой
+  if (Math.abs(f0) > 1e-10) {
+    originalEqHTML += f0.toFixed(2);
+  }
+  
+  let fTerms = [];
+  for (let j = 0; j < n; j++) {
+    if (Math.abs(f[j]) > 1e-10) {
+      let sign = f[j] >= 0 ? "+" : "-";
+      let absF = Math.abs(f[j]);
+      let numStr = (absF === 1) ? "" : absF.toString();
+      let term = sign + numStr + "x" + (j + 1);
+      if (fTerms.length === 0 && f[j] > 0) term = numStr + "x" + (j + 1);
+      fTerms.push(term);
+    }
+  }
+  
+  let fStr = fTerms.join(" ").replace(/^\+/, "");
+  if (Math.abs(f0) > 1e-10 && fStr.length > 0 && fStr[0] !== '-') {
+    originalEqHTML += " + " + fStr;
+  } else if (fStr.length > 0) {
+    originalEqHTML += fStr;
+  }
+  
+  originalEqHTML += '</p><p><strong>при ограничениях:</strong></p><ul>';
+  for (let i = 0; i < eqs; i++) {
+    originalEqHTML += '<li>' + Lab3.formatEquation(A[i], signs[i], b[i], n) + '</li>';
+  }
+  originalEqHTML += '</ul>';
+  Lab3.appendOutput(originalEqHTML);
+
+  // Правила приведения к каноническому виду:
+  // 1. Все неравенства преобразуются в равенства
+  // 2. Все переменные должны быть неотрицательными
+  // 3. Все правые части должны быть неотрицательными
+  // 4. Добавляем дополнительные переменные для ≤ и ≥
+  // 5. Добавляем искусственные переменные для ≥ и =
+
+  let canonicalHTML = '<h3>Канонический вид:</h3><p><strong>' + direction + '</strong><br>F = ';
+  
+  // Добавляем свободный член
+  if (Math.abs(f0) > 1e-10) {
+    canonicalHTML += f0.toFixed(2);
+  }
+  
+  fTerms = [];
+  for (let j = 0; j < n; j++) {
+    if (Math.abs(f[j]) > 1e-10) {
+      let sign = f[j] >= 0 ? "+" : "-";
+      let absF = Math.abs(f[j]);
+      let numStr = (absF === 1) ? "" : absF.toString();
+      let term = sign + numStr + "x" + (j + 1);
+      if (fTerms.length === 0 && f[j] > 0) term = numStr + "x" + (j + 1);
+      fTerms.push(term);
+    }
+  }
+  
+  fStr = fTerms.join(" ").replace(/^\+/, "");
+  if (Math.abs(f0) > 1e-10 && fStr.length > 0 && fStr[0] !== '-') {
+    canonicalHTML += " + " + fStr;
+  } else if (fStr.length > 0) {
+    canonicalHTML += fStr;
+  }
+  
+  canonicalHTML += '</p><p><strong>при ограничениях:</strong></p><ul>';
+
+  // Подсчет дополнительных и искусственных переменных
+  let slackCount = 0;
+  let artificialCount = 0;
+  let eqCounter = 0;
+  
+  for (let i = 0; i < eqs; i++) {
+    if (signs[i] === "le" || signs[i] === "ge") slackCount++;
+    if (signs[i] === "ge" || signs[i] === "eq") artificialCount++;
+  }
+
+  // Все переменные в каноническом виде обозначаются как x
+  let totalVarsInCanonical = n + slackCount + artificialCount;
+  let currentVarIndex = n + 1;
+  
+  for (let i = 0; i < eqs; i++) {
+    let terms = [];
+    
+    // Основные переменные
+    for (let j = 0; j < n; j++) {
+      if (Math.abs(A[i][j]) > 1e-10) {
+        let c = A[i][j];
+        let sign = c >= 0 ? "+" : "-";
+        let absC = Math.abs(c);
+        let numStr = (absC === 1) ? "" : absC.toString();
+        let term = sign + numStr + "x" + (j + 1);
+        if (terms.length === 0 && c > 0) term = numStr + "x" + (j + 1);
+        terms.push(term);
+      }
+    }
+
+    // Добавляем дополнительные/искусственные переменные
+    if (signs[i] === "le") {
+      // Для ≤ добавляем дополнительную переменную x_{n+1}, x_{n+2}, ...
+      terms.push("+x" + currentVarIndex);
+      currentVarIndex++;
+    } else if (signs[i] === "ge") {
+      // Для ≥ добавляем дополнительную переменную с минусом и искусственную
+      terms.push("-x" + currentVarIndex);
+      currentVarIndex++;
+      terms.push("+x" + currentVarIndex); // Искусственная переменная
+      currentVarIndex++;
+    } else if (signs[i] === "eq") {
+      // Для = добавляем только искусственную переменную
+      terms.push("+x" + currentVarIndex);
+      currentVarIndex++;
+    }
+
+    let eqStr = terms.join(" ").replace(/^\+/, "") + " = " + b[i];
+    canonicalHTML += '<li>' + eqStr + '</li>';
+  }
+  canonicalHTML += '</ul>';
+  canonicalHTML += '<p><strong>Условие неотрицательности:</strong><br>';
+  canonicalHTML += 'x₁ ≥ 0, x₂ ≥ 0, ..., x<sub>' + totalVarsInCanonical + '</sub> ≥ 0</p>';
+  
+  if (artificialCount > 0) {
+    canonicalHTML += '<p><em>Примечание: Переменные x<sub>' + (n + slackCount + 1) + '</sub>...x<sub>' + totalVarsInCanonical + '</sub> — искусственные переменные.</em></p>';
+  }
+  
+  Lab3.appendOutput(canonicalHTML);
+
+  // Строим расширенную матрицу для М-метода
+  let artificialCountActual = 0;
+  for (let i = 0; i < eqs; i++) {
+    if (signs[i] === "ge" || signs[i] === "eq") artificialCountActual++;
+  }
+
+  const totalVars = n + slackCount + artificialCountActual;
+  const fullA = [];
+  const fullB = [];
+  let artIndex = 0;
+  let slackIndex = 0;
+
+  for (let i = 0; i < eqs; i++) {
+    const row = new Array(totalVars).fill(0);
+    
+    // Основные переменные
+    for (let j = 0; j < n; j++) row[j] = A[i][j];
+
+    if (signs[i] === "le") {
+      // Дополнительная переменная (slack)
+      row[n + slackIndex] = 1;
+      slackIndex++;
+    } else if (signs[i] === "ge") {
+      // Дополнительная переменная с минусом
+      row[n + slackIndex] = -1;
+      slackIndex++;
+      // Искусственная переменная
+      row[n + slackCount + artIndex] = 1;
+      artIndex++;
+    } else {
+      // Искусственная переменная для равенства
+      row[n + slackCount + artIndex] = 1;
+      artIndex++;
+    }
+    fullA.push(row);
+    fullB.push(b[i]);
+  }
+
+  const totalRows = eqs + 2;
+  const data = Array(totalRows).fill(null).map(() => Array(1 + totalVars).fill(0));
+
+  for (let i = 0; i < eqs; i++) {
+    data[i][0] = fullB[i];
+    for (let j = 0; j < totalVars; j++) data[i][1 + j] = fullA[i][j];
+  }
+
+  // Строка целевой функции f
+  data[eqs][0] = f0;
+  for (let j = 0; j < n; j++) {
+    const coeff = (Lab3.mode === "max") ? -f[j] : f[j];
+    data[eqs][1 + j] = coeff;
+  }
+
+  // Строка искусственной целевой функции g (M-строка)
+  data[eqs + 1][0] = 0;
+  for (let i = 0; i < eqs; i++) {
+    if (signs[i] === "ge" || signs[i] === "eq") {
+      data[eqs + 1][0] -= fullB[i];
+      for (let j = 0; j < totalVars; j++) data[eqs + 1][1 + j] -= fullA[i][j];
+    }
+  }
+
+  // Формируем метки столбцов (только x)
+  const colLabels = ["1"];
+  for (let j = 1; j <= n; j++) colLabels.push(`x${j}`);
+  
+  let varCounter = n + 1;
+  for (let j = 0; j < slackCount; j++) {
+    colLabels.push(`x${varCounter}`);
+    varCounter++;
+  }
+  for (let j = 0; j < artificialCountActual; j++) {
+    colLabels.push(`x${varCounter}`);
+    varCounter++;
+  }
+
+  // Формируем метки строк (базисные переменные)
+  const rowLabels = [];
+  varCounter = n + 1;
+  for (let i = 0; i < eqs; i++) {
+    if (signs[i] === "le") {
+      rowLabels.push(`x${varCounter}`);
+      varCounter++;
+    } else if (signs[i] === "ge") {
+      rowLabels.push(`x${varCounter + 1}`); // Искусственная переменная
+      varCounter += 2;
+    } else {
+      rowLabels.push(`x${varCounter}`); // Искусственная переменная
+      varCounter++;
+    }
+  }
+  rowLabels.push("f");
+  rowLabels.push("g");
+
+  Lab3.currentMatrix = {
+    data: data.map(function(row) {
+      return row.map(function(x) { return parseFloat(x.toFixed(10)); });
+    }),
+    rowLabels: rowLabels,
+    colLabels: colLabels
+  };
+
+  Lab3.startSolving();
+};
+
+// =============== Общая логика построения М-таблицы ===============
+Lab3.buildMTableFromData = function (m, n, A, b, f, f0 = 0) {
+  const totalCols = 1 + n + m;
+  const totalRows = m + 2;
+  const data = Array(totalRows).fill(null).map(() => Array(totalCols).fill(0));
+
+  // Заполняем ограничения (предполагаем, что все ограничения типа ≤)
+  for (let i = 0; i < m; i++) {
+    data[i][0] = b[i];
+    for (let j = 0; j < n; j++) data[i][1 + j] = A[i][j];
+    data[i][1 + n + i] = 1; // Дополнительные переменные
+  }
+
+  // Строка целевой функции f
+  data[m][0] = f0;
+  for (let j = 0; j < n; j++) {
+    const coeff = (Lab3.mode === "max") ? -f[j] : f[j];
+    data[m][1 + j] = coeff;
+  }
+
+  // Строка искусственной целевой функции g
+  // В режиме 1 предполагаем, что нет искусственных переменных,
+  // поэтому строка g будет нулевой (или с коэффициентами от дополнительных переменных)
+  data[m + 1][0] = 0;
+  for (let j = 0; j < n; j++) {
+    data[m + 1][1 + j] = 0;
+  }
+  for (let i = 0; i < m; i++) {
+    data[m + 1][1 + n + i] = -1; // Для дополнительных переменных в g строке
+  }
+
+  const colLabels = ["1"];
+  for (let j = 1; j <= n; j++) colLabels.push(`x${j}`);
+  for (let i = 1; i <= m; i++) colLabels.push(`x${n + i}`);
+
+  const rowLabels = [];
+  for (let i = 1; i <= m; i++) rowLabels.push(`x${n + i}`);
+  rowLabels.push("f");
+  rowLabels.push("g");
+
+  Lab3.currentMatrix = {
+    data: data.map(function(row) {
+      return row.map(function(x) { return parseFloat(x.toFixed(10)); });
+    }),
+    rowLabels: rowLabels,
+    colLabels: colLabels
+  };
+
+  Lab3.startSolving();
+};
+
+// =============== Вывод шагов ===============
+Lab3.startSolving = function () {
+  Lab3.iteration = 0;
+  Lab3.status = "solving";
+  Lab3.appendOutput('<h3>Начальная М-таблица (направление: ' + Lab3.mode + '):</h3>');
+  Lab3.renderCurrentStep();
+};
+
+Lab3.renderTableHTML = function (M) {
+  let html = '<table border="1" cellpadding="6" cellspacing="0" style="font-family: monospace; text-align: right; margin: 10px 0;">';
+  html += '<tr><th></th>';
+  for (let j = 0; j < M.colLabels.length; j++) {
+    html += '<th>' + M.colLabels[j] + '</th>';
   }
   html += '</tr>';
-  
-  if (this.table.length > eqCount + 1) {
-    html += `<tr><td>G</td>`;
-    for (let j = 0; j <= varCount; j++) {
-      html += `<td>${this.formatNumber(this.table[eqCount + 1][j])}</td>`;
+
+  for (let i = 0; i < M.rowLabels.length; i++) {
+    html += '<tr><td style="text-align: left; font-weight: bold;">' + M.rowLabels[i] + '</td>';
+    for (let j = 0; j < M.data[i].length; j++) {
+      let val = M.data[i][j];
+      if (Math.abs(val) < 1e-12) val = 0;
+      val = Math.round(val * 10000) / 10000;
+      let isB = (j === 0);
+      let bgColor = isB ? '#f9f9ff' : 'transparent';
+      if (M.rowLabels[i] === 'f') bgColor = '#fff0f0';
+      if (M.rowLabels[i] === 'g') bgColor = '#f0fff0';
+      html += '<td style="background-color: ' + bgColor + ';">' + val + '</td>';
     }
     html += '</tr>';
   }
-  
   html += '</table>';
-  
-  document.getElementById('basis-table').innerHTML = html;
+  return html;
 };
 
-Lab3.solveWithArtificialBasis = function() {
-  if (!this.table.length) {
-    this.showError("Сначала загрузите таблицу!");
-    return;
+Lab3.formatSolution = function (M) {
+  let totalVars = 0;
+  let allLabels = M.colLabels.concat(M.rowLabels);
+  for (let i = 0; i < allLabels.length; i++) {
+    let label = allLabels[i];
+    let match = label.match(/^x(\d+)$/);
+    if (match) {
+      let num = parseInt(match[1], 10);
+      if (num > totalVars) totalVars = num;
+    }
   }
-  
-  this.hasArtificialBasis = true;
-  this.iterations = [];
-  this.currentIteration = 0;
-  
-  document.getElementById('iterations-container').innerHTML = '';
-  document.getElementById('result-container').innerHTML = '';
-  document.getElementById('error-message').style.display = 'none';
-  
-  const eqCount = this.basis.length;
-  if (this.table.length === eqCount + 1) {
-    this.addArtificialRow();
-  }
-  
-  // Сохраняем начальную таблицу
-  this.saveIteration("Начальная таблица");
-  
-  // Выполняем итерации в точном порядке из примера
-  this.performSpecificIterations();
-  
-  this.displayAllIterations();
-  this.displayResult();
-};
 
-Lab3.addArtificialRow = function() {
-  const varCount = this.table[0].length - 1;
-  const eqCount = this.basis.length;
-  
-  // Создаем строку G как в примере: -1, 2, 2, 0, -3, -10
-  // Но правильнее вычисляем: G = -(сумма всех искусственных переменных)
-  let gRow = new Array(varCount + 1).fill(0);
-  
-  // Для каждой базисной переменной (все искусственные в начальном базисе)
-  for (let i = 0; i < eqCount; i++) {
-    for (let j = 0; j <= varCount; j++) {
-      gRow[j] -= this.table[i][j];
-    }
-  }
-  
-  // Для примера из условия строка G должна быть: -1, 2, 2, 0, -3, -10
-  // Проверяем, совпадает ли наш расчет с примером
-  const expectedG = [-1, 2, 2, 0, -3, -10];
-  let matchesExample = true;
-  for (let j = 0; j <= varCount; j++) {
-    if (Math.abs(gRow[j] - expectedG[j]) > 0.01) {
-      matchesExample = false;
-      break;
-    }
-  }
-  
-  // Если это пример из условия, используем точные значения
-  if (matchesExample || this.checkIfExampleFromCondition()) {
-    for (let j = 0; j <= varCount; j++) {
-      gRow[j] = expectedG[j];
-    }
-  }
-  
-  this.table.push(gRow);
-};
-
-Lab3.checkIfExampleFromCondition = function() {
-  // Проверяем, совпадает ли таблица с примером из условия
-  const exampleTable = [
-    [1, -4, 2, -5, 9, 3],
-    [0, 1, -3, 4, -5, 6],
-    [0, 1, -1, 1, -1, 1],
-    [2, 6, -5, 1, 4, 0]
-  ];
-  
-  if (this.table.length !== exampleTable.length) return false;
-  
-  for (let i = 0; i < this.table.length; i++) {
-    if (this.table[i].length !== exampleTable[i].length) return false;
-    for (let j = 0; j < this.table[i].length; j++) {
-      if (Math.abs(this.table[i][j] - exampleTable[i][j]) > 0.001) {
-        return false;
+  let result = new Array(totalVars).fill(0.0);
+  for (let i = 0; i < M.rowLabels.length; i++) {
+    let label = M.rowLabels[i];
+    let match = label.match(/^x(\d+)$/);
+    if (match) {
+      let idx = parseInt(match[1], 10) - 1;
+      if (idx >= 0 && idx < result.length) {
+        result[idx] = M.data[i][0];
       }
     }
   }
+
+  let fVal = M.data[M.data.length - 2][0];
+  let gVal = M.data[M.data.length - 1][0];
+  let fStr = "";
   
-  return true;
+  // Учитываем направление оптимизации при выводе значения F
+  let finalFVal = (Lab3.mode === "max") ? fVal : -fVal;
+  
+  if (Math.abs(gVal) < 1e-10) {
+    fStr = "F = " + finalFVal.toFixed(4);
+  } else if (gVal < 0) {
+    fStr = "F = " + finalFVal.toFixed(4) + " - " + Math.abs(gVal).toFixed(4) + "M";
+  } else {
+    fStr = "F = " + finalFVal.toFixed(4) + " + " + gVal.toFixed(4) + "M";
+  }
+
+  let nonZeroVars = [];
+  for (let i = 0; i < result.length; i++) {
+    if (Math.abs(result[i]) > 1e-10) {
+      nonZeroVars.push("x" + (i + 1) + "=" + result[i].toFixed(4));
+    }
+  }
+
+  return {
+    fStr: fStr,
+    vars: nonZeroVars.length ? nonZeroVars.join(" ") : "все нулевые"
+  };
 };
 
-Lab3.performSpecificIterations = function() {
-  // Выполняем итерации в точном порядке из примера
-  
-  // Итерация 1: Разрешающий столбец x1 (столбец 0)
-  const pivotRow1 = this.findPivotRow(0);
-  if (pivotRow1 !== -1) {
-    this.performPivot(pivotRow1, 0);
-    this.saveIteration("Итерация 1: Разрешающий столбец: x₁");
+Lab3.renderCurrentStep = function () {
+  if (!Lab3.currentMatrix) return;
+
+  let tableHTML = Lab3.renderTableHTML(Lab3.currentMatrix);
+  let sol = Lab3.formatSolution(Lab3.currentMatrix);
+
+  let stepHTML = "";
+  if (Lab3.iteration === 0) {
+    stepHTML = '<div class="lab3-step">' + tableHTML;
+  } else {
+    stepHTML = '<div class="lab3-step"><h4>Итерация ' + Lab3.iteration + ':</h4>' + tableHTML;
   }
-  
-  // Итерация 2: Разрешающий столбец x4 (столбец 3)
-  const pivotRow2 = this.findPivotRow(3);
-  if (pivotRow2 !== -1) {
-    this.performPivot(pivotRow2, 3);
-    this.saveIteration("Итерация 2: Разрешающий столбец: x₄");
-  }
-  
-  // Итерация 3: Разрешающий столбец x3 (столбец 2)
-  const pivotRow3 = this.findPivotRow(2);
-  if (pivotRow3 !== -1) {
-    this.performPivot(pivotRow3, 2);
-    this.saveIteration("Итерация 3: Разрешающий столбец: x₃");
-  }
-  
-  // Итерация 4: Разрешающий столбец x5 (столбец 4)
-  const pivotRow4 = this.findPivotRow(4);
-  if (pivotRow4 !== -1) {
-    this.performPivot(pivotRow4, 4);
-    this.saveIteration("Итерация 4: Разрешающий столбец: x₅");
-  }
-  
-  // Итерация 5: Проверяем оптимальность
-  this.saveIteration("Итерация 5: Проверка оптимальности");
+  stepHTML += '<p><strong>' + sol.fStr + '</strong></p>';
+  stepHTML += '<p><strong>Переменные:</strong> ' + sol.vars + '</p></div>';
+  Lab3.appendOutput(stepHTML);
 };
 
-Lab3.findPivotRow = function(pivotCol) {
-  const varCount = this.table[0].length - 1;
-  const eqCount = this.basis.length;
-  
-  let pivotRow = -1;
-  let minRatio = Infinity;
-  
-  for (let i = 0; i < eqCount; i++) {
-    const coeff = this.table[i][pivotCol];
-    if (coeff > 0) {
-      const ratio = this.table[i][varCount] / coeff;
-      if (ratio < minRatio) {
+// =============== Жорданово исключение ===============
+Lab3.copyMatrix = function (M) {
+  return {
+    data: M.data.map(function(row) { return row.slice(); }),
+    rowLabels: M.rowLabels.slice(),
+    colLabels: M.colLabels.slice()
+  };
+};
+
+Lab3.jordanStep = function (M, k, s) {
+  const permissive = M.data[k][s];
+  if (Math.abs(permissive) < 1e-10) {
+    return { matrix: M, error: "Разрешающий элемент ≈ 0" };
+  }
+
+  const newM = Lab3.copyMatrix(M);
+  const rows = newM.data.length;
+  const cols = newM.data[0].length;
+
+  var temp = newM.colLabels[s];
+  newM.colLabels[s] = newM.rowLabels[k];
+  newM.rowLabels[k] = temp;
+
+  for (var j = 0; j < cols; j++) newM.data[k][j] = M.data[k][j] / permissive;
+  for (var i = 0; i < rows; i++) {
+    if (i !== k) newM.data[i][s] = -M.data[i][s] / permissive;
+  }
+  for (var i = 0; i < rows; i++) {
+    for (var j = 0; j < cols; j++) {
+      if (i !== k && j !== s) {
+        newM.data[i][j] = M.data[i][j] - (M.data[i][s] * M.data[k][j]) / permissive;
+      }
+    }
+  }
+  newM.data[k][s] = 1.0 / permissive;
+  return { matrix: newM, error: null };
+};
+
+Lab3.getKS = function (M) {
+  const rows = M.data.length;
+  const cols = M.data[0].length;
+  if (rows < 1 || cols < 2) return { k: -1, s: -1 };
+
+  // Для задачи max выбираем минимальный отрицательный в строке g
+  // Для задачи min выбираем максимальный положительный в строке g
+  const gRow = M.data[rows - 1].slice(1);
+  let pivotColIdx = -1;
+
+  if (Lab3.mode === "max") {
+    let minVal = Math.min.apply(null, gRow);
+    if (minVal >= -1e-10) return { k: -1, s: -1 };
+    pivotColIdx = gRow.indexOf(minVal);
+  } else {
+    let maxVal = Math.max.apply(null, gRow);
+    if (maxVal <= 1e-10) return { k: -1, s: -1 };
+    pivotColIdx = gRow.indexOf(maxVal);
+  }
+
+  const pivotCol = pivotColIdx + 1;
+  let pivotRow = -1, minRatio = Infinity;
+  for (let i = 0; i < rows - 2; i++) {
+    const a = M.data[i][pivotCol];
+    if (a > 1e-10) {
+      const ratio = M.data[i][0] / a;
+      if (ratio >= -1e-10 && ratio < minRatio) {
         minRatio = ratio;
         pivotRow = i;
       }
     }
   }
-  
-  return pivotRow;
+
+  if (pivotRow === -1) return { k: -1, s: 0 };
+  return { k: pivotRow, s: pivotCol };
 };
 
-Lab3.performPivot = function(pivotRow, pivotCol) {
-  const rows = this.table.length;
-  const cols = this.table[0].length;
-  
-  const pivot = this.table[pivotRow][pivotCol];
-  
-  if (Math.abs(pivot) < 1e-10) return;
-  
-  // Обновляем разрешающую строку
-  for (let j = 0; j < cols; j++) {
-    this.table[pivotRow][j] /= pivot;
+Lab3.step = function () {
+  if (!Lab3.currentMatrix || Lab3.status !== "solving") {
+    alert("Сначала постройте М-таблицу!");
+    return;
   }
-  
-  // Обновляем остальные строки
-  for (let i = 0; i < rows; i++) {
-    if (i !== pivotRow) {
-      const factor = this.table[i][pivotCol];
-      for (let j = 0; j < cols; j++) {
-        this.table[i][j] -= factor * this.table[pivotRow][j];
+
+  let ks = Lab3.getKS(Lab3.currentMatrix);
+  if (ks.k === -1 && ks.s === -1) {
+    // Проверяем, есть ли искусственные переменные в базисе
+    let hasArtificialInBasis = false;
+    for (let i = 0; i < Lab3.currentMatrix.rowLabels.length - 2; i++) {
+      let label = Lab3.currentMatrix.rowLabels[i];
+      // Искусственные переменные - это те, которые были добавлены для ≥ и =
+      // В нашем обозначении это x с большими номерами
+      // Более точная проверка потребовала бы отслеживания, какие переменные искусственные
+      if (label.startsWith('x')) {
+        let num = parseInt(label.substring(1));
+        // Простая эвристика: если номер переменной больше общего числа исходных переменных + ограничений
+        // то это может быть искусственная переменная
+        let totalVars = Lab3.currentMatrix.colLabels.length - 1;
+        if (num > totalVars / 2) {
+          hasArtificialInBasis = true;
+          break;
+        }
       }
     }
+    
+    if (hasArtificialInBasis) {
+      Lab3.appendOutput('<div class="lab3-step"><p>⚠️ <strong>Искусственные переменные остались в базисе. Возможно, задача не имеет допустимого решения.</strong></p></div>');
+    } else {
+      Lab3.appendOutput('<div class="lab3-step"><p>✅ <strong>Оптимальный план найден! (направление: ' + Lab3.mode + ')</strong></p></div>');
+    }
+    Lab3.status = "optimal";
+    return;
+  } else if (ks.k === -1 && ks.s === 0) {
+    Lab3.appendOutput('<div class="lab3-step"><p>❌ <strong>Система не ограничена!</strong></p></div>');
+    Lab3.status = "unbounded";
+    return;
   }
-  
-  // Обновляем базисную переменную
-  this.basis[pivotRow] = `x${pivotCol + 1}`;
+
+  Lab3.iteration++;
+  let result = Lab3.jordanStep(Lab3.currentMatrix, ks.k, ks.s);
+  if (result.error) {
+    Lab3.appendOutput('<div class="lab3-step"><p>Ошибка: ' + result.error + '</p></div>');
+    return;
+  }
+
+  Lab3.currentMatrix = result.matrix;
+  Lab3.renderCurrentStep();
+
+  if (Lab3.iteration >= Lab3.maxIterations) {
+    Lab3.appendOutput('<div class="lab3-step"><p>⚠️ Достигнуто максимальное число итераций.</p></div>');
+  }
 };
 
-Lab3.saveIteration = function(description) {
-  const iteration = {
-    description: description,
-    basis: [...this.basis],
-    table: this.table.map(row => [...row])
+Lab3.solveAll = function () {
+  if (!Lab3.currentMatrix || Lab3.status !== "solving") {
+    alert("Сначала постройте М-таблицу!");
+    return;
+  }
+
+  while (Lab3.status === "solving" && Lab3.iteration < Lab3.maxIterations) {
+    let ks = Lab3.getKS(Lab3.currentMatrix);
+    if (ks.k === -1 && ks.s === -1) {
+      // Проверяем, есть ли искусственные переменные в базисе
+      let hasArtificialInBasis = false;
+      for (let i = 0; i < Lab3.currentMatrix.rowLabels.length - 2; i++) {
+        let label = Lab3.currentMatrix.rowLabels[i];
+        if (label.startsWith('x')) {
+          let num = parseInt(label.substring(1));
+          let totalVars = Lab3.currentMatrix.colLabels.length - 1;
+          if (num > totalVars / 2) {
+            hasArtificialInBasis = true;
+            break;
+          }
+        }
+      }
+      
+      if (hasArtificialInBasis) {
+        Lab3.appendOutput('<div class="lab3-step"><p>⚠️ <strong>Искусственные переменные остались в базисе. Возможно, задача не имеет допустимого решения.</strong></p></div>');
+      } else {
+        Lab3.appendOutput('<div class="lab3-step"><p>✅ <strong>Оптимальный план найден! (направление: ' + Lab3.mode + ')</strong></p></div>');
+      }
+      Lab3.status = "optimal";
+      break;
+    } else if (ks.k === -1 && ks.s === 0) {
+      Lab3.appendOutput('<div class="lab3-step"><p>❌ <strong>Система не ограничена!</strong></p></div>');
+      Lab3.status = "unbounded";
+      break;
+    }
+
+    Lab3.iteration++;
+    let result = Lab3.jordanStep(Lab3.currentMatrix, ks.k, ks.s);
+    if (result.error) {
+      Lab3.appendOutput('<div class="lab3-step"><p>Ошибка: ' + result.error + '</p></div>');
+      break;
+    }
+    Lab3.currentMatrix = result.matrix;
+    Lab3.renderCurrentStep();
+  }
+};
+
+// =============== Пример 1: Уравнения с =
+Lab3.loadExample1 = function () {
+  Lab3.mode = "max";
+
+  const A = [
+    [1, -4, 2, -5, 9],
+    [0, 1, -3, 4, -5],
+    [0, 1, -1, 1, -1]
+  ];
+  const b = [3, 6, 1];
+  const f = [-2, -6, 5, -1, -4];
+  const f0 = 0;
+
+  const eqs = 3;
+  const n = 5;
+  
+  // Все ограничения типа =, поэтому только искусственные переменные
+  const slackCount = 0;
+  const artificialCount = 3;
+  
+  const totalVars = n + slackCount + artificialCount;
+  const fullA = [];
+  const fullB = [];
+
+  for (let i = 0; i < eqs; i++) {
+    const row = new Array(totalVars).fill(0);
+    for (let j = 0; j < n; j++) row[j] = A[i][j];
+    // Добавляем искусственные переменные
+    row[n + slackCount + i] = 1;
+    fullA.push(row);
+    fullB.push(b[i]);
+  }
+
+  const totalRows = eqs + 2;
+  const data = Array(totalRows).fill(null).map(() => Array(1 + totalVars).fill(0));
+
+  for (let i = 0; i < eqs; i++) {
+    data[i][0] = fullB[i];
+    for (let j = 0; j < totalVars; j++) data[i][1 + j] = fullA[i][j];
+  }
+
+  // Строка целевой функции f
+  data[eqs][0] = f0;
+  for (let j = 0; j < n; j++) {
+    const coeff = (Lab3.mode === "max") ? -f[j] : f[j];
+    data[eqs][1 + j] = coeff;
+  }
+
+  // Строка искусственной целевой функции g
+  data[eqs + 1][0] = -b.reduce((a, x) => a + x, 0);
+  for (let j = 0; j < totalVars; j++) {
+    let sum = 0;
+    for (let i = 0; i < eqs; i++) sum += fullA[i][j];
+    data[eqs + 1][1 + j] = -sum;
+  }
+
+  const colLabels = ["1"];
+  for (let j = 1; j <= n; j++) colLabels.push(`x${j}`);
+  for (let j = 1; j <= artificialCount; j++) colLabels.push(`x${n + j}`);
+
+  const rowLabels = [];
+  for (let i = 1; i <= artificialCount; i++) rowLabels.push(`x${n + i}`);
+  rowLabels.push("f");
+  rowLabels.push("g");
+
+  Lab3.currentMatrix = {
+    data: data,
+    rowLabels: rowLabels,
+    colLabels: colLabels
   };
-  this.iterations.push(iteration);
+
+  Lab3.appendOutput(`
+    <h3>Пример 1: Уравнения с равенствами (направление: ${Lab3.mode})</h3>
+    <p><strong>Максимизировать</strong><br>F = ${f0} - 2x₁ - 6x₂ + 5x₃ - x₄ - 4x₅</p>
+    <p><strong>при ограничениях:</strong></p>
+    <ul>
+      <li>x₁ - 4x₂ + 2x₃ - 5x₄ + 9x₅ = 3</li>
+      <li>x₂ - 3x₃ + 4x₄ - 5x₅ = 6</li>
+      <li>x₂ - x₃ + x₄ - x₅ = 1</li>
+    </ul>
+    <h4>Канонический вид:</h4>
+    <p><strong>Максимизировать</strong><br>F = -2x₁ - 6x₂ + 5x₃ - x₄ - 4x₅</p>
+    <p><strong>при ограничениях:</strong></p>
+    <ul>
+      <li>x₁ - 4x₂ + 2x₃ - 5x₄ + 9x₅ + x₆ = 3</li>
+      <li>x₂ - 3x₃ + 4x₄ - 5x₅ + x₇ = 6</li>
+      <li>x₂ - x₃ + x₄ - x₅ + x₈ = 1</li>
+    </ul>
+    <p><strong>Условие неотрицательности:</strong><br>
+    x₁ ≥ 0, x₂ ≥ 0, x₃ ≥ 0, x₄ ≥ 0, x₅ ≥ 0, x₆ ≥ 0, x₇ ≥ 0, x₈ ≥ 0</p>
+    <p><em>Примечание: Переменные x₆, x₇, x₈ — искусственные переменные.</em></p>
+  `);
+
+  Lab3.startSolving();
 };
 
-Lab3.displayAllIterations = function() {
-  let html = '<h3>Все итерации решения методом искусственного базиса:</h3>';
-  
-  if (this.iterations.length === 0) {
-    html += '<p>Итераций не выполнено.</p>';
-  }
-  
-  this.iterations.forEach((iter, idx) => {
-    html += `<div class="iteration" style="margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 5px;">`;
-    html += `<h4>${iter.description}</h4>`;
-    
-    const varCount = iter.table[0].length - 1;
-    const eqCount = iter.basis.length;
-    
-    html += '<table border="1" cellpadding="5" cellspacing="0" style="background: white; margin: 10px 0;">';
-    html += '<tr><th>Базис</th>';
-    
-    for (let i = 1; i <= varCount; i++) {
-      html += `<th>x<sub>${i}</sub></th>`;
-    }
-    html += '<th>1</th></tr>';
-    
-    for (let i = 0; i < eqCount; i++) {
-      html += `<tr><td>${iter.basis[i]}</td>`;
-      for (let j = 0; j <= varCount; j++) {
-        html += `<td>${this.formatNumber(iter.table[i][j])}</td>`;
-      }
-      html += '</tr>';
-    }
-    
-    html += `<tr><td>F</td>`;
-    for (let j = 0; j <= varCount; j++) {
-      html += `<td>${this.formatNumber(iter.table[eqCount][j])}</td>`;
-    }
-    html += '</tr>';
-    
-    if (iter.table.length > eqCount + 1) {
-      html += `<tr><td>G</td>`;
-      for (let j = 0; j <= varCount; j++) {
-        html += `<td>${this.formatNumber(iter.table[eqCount + 1][j])}</td>`;
-      }
-      html += '</tr>';
-    }
-    
-    html += '</table>';
-    html += '</div>';
-  });
-  
-  document.getElementById('iterations-container').innerHTML = html;
-};
+// =============== Пример 2: Таблица (как в Python)
+Lab3.loadExample2 = function () {
+  // Данные из вашего Python-кода
+  const data = [
+    [32, 1, 7, 1, 0, 0],
+    [42, 2, 5, 0, 1, 0],
+    [62, 3, 4, 0, 0, 1],
+    [0, -3, -8, 0, 0, 0],  // F строка (max: F = 3x₁ + 8x₂)
+    [0, 0, 0, 0, 0, 0],    // Исходная строка f
+    [-136, -6, -16, -1, -1, -1]  // Строка g (M-строка)
+  ].map(row => row.map(x => parseFloat(x)));
 
-Lab3.displayResult = function() {
-  if (this.iterations.length === 0) return;
-  
-  const lastIter = this.iterations[this.iterations.length - 1];
-  const eqCount = lastIter.basis.length;
-  
-  const solution = {};
-  
-  for (let i = 0; i < eqCount; i++) {
-    const varName = lastIter.basis[i];
-    const value = lastIter.table[i][lastIter.table[i].length - 1];
-    solution[varName] = value;
-  }
-  
-  const fValue = lastIter.table[eqCount][lastIter.table[eqCount].length - 1];
-  const gValue = lastIter.table.length > eqCount + 1 ? 
-    lastIter.table[eqCount + 1][lastIter.table[eqCount + 1].length - 1] : 0;
-  
-  let html = '<h3 style="color: #2c3e50;">Результат:</h3>';
-  html += '<div style="font-size: 1.1em; line-height: 1.6; background: #e8f4f8; padding: 15px; border-radius: 5px;">';
-  
-  const varCount = lastIter.table[0].length - 1;
-  
-  // Выводим базисные переменные
-  for (let i = 0; i < eqCount; i++) {
-    const varName = lastIter.basis[i];
-    if (varName.startsWith('x') && parseInt(varName.substring(1)) <= varCount) {
-      html += `${varName} = ${this.formatNumber(solution[varName])}<br>`;
-    }
-  }
-  
-  html += `<br><strong>F = ${this.formatNumber(fValue)}</strong><br>`;
-  html += `G = ${this.formatNumber(gValue)}`;
-  html += '</div>';
-  
-  // Проверяем, соответствует ли результат примеру из условия
-  const x5 = solution['x5'] || 0;
-  const x3 = solution['x3'] || 0;
-  const x4 = solution['x4'] || 0;
-  
-  if (Math.abs(x5 - 14) < 0.1 && Math.abs(x3 - 16) < 0.1 && Math.abs(x4 - 31) < 0.1 && Math.abs(fValue - (-7)) < 0.1) {
-    html += '<div style="margin-top: 15px; padding: 10px; background: #d4edda; border-radius: 5px; color: #155724;">';
-    html += '<strong>✓ Решение соответствует примеру из условия:</strong><br>';
-    html += 'x₅ = 14, x₃ = 16, x₄ = 31, F = -7, G = 0';
-    html += '</div>';
-  }
-  
-  document.getElementById('result-container').innerHTML = html;
-  document.getElementById('error-message').style.display = 'none';
-};
+  const rows = data.length;
+  const cols = data[0].length;
 
-Lab3.formatNumber = function(num) {
-  if (Math.abs(num) < 1e-10) return "0";
-  const rounded = Math.round(num * 1000) / 1000;
-  return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(3);
-};
+  const colLabels = ["1", "x1", "x2", "x3", "x4", "x5"];
+  const rowLabels = ["x3", "x4", "x5", "f", "g"];
 
-Lab3.resetAll = function() {
-  this.equations = [];
-  this.objective = [];
-  this.basis = [];
-  this.table = [];
-  this.iterations = [];
-  this.equationSigns = [];
-  this.currentIteration = 0;
-  this.hasArtificialBasis = false;
+  Lab3.mode = "max";
   
-  document.getElementById('basis-display').style.display = 'none';
-  document.getElementById('canonical-display').style.display = 'none';
-  document.getElementById('iterations-container').innerHTML = '';
-  document.getElementById('result-container').innerHTML = '';
-  document.getElementById('error-message').style.display = 'none';
-  document.getElementById('basis-input-container').innerHTML = '';
-  document.getElementById('equation-input-container').innerHTML = '';
-  
-  if (this.isCanonicalMode) {
-    document.getElementById('objective-input').style.display = 'none';
-  }
+  Lab3.currentMatrix = {
+    data: data,
+    rowLabels: rowLabels,
+    colLabels: colLabels
+  };
+
+  Lab3.appendOutput(`
+    <h3>Пример 2: Таблица (аналог Python-кода) (направление: ${Lab3.mode})</h3>
+    <p><strong>Максимизировать</strong><br>F = 3x₁ + 8x₂</p>
+    <p><strong>при ограничениях:</strong></p>
+    <ul>
+      <li>x₁ + 7x₂ ≤ 32</li>
+      <li>2x₁ + 5x₂ ≤ 42</li>
+      <li>3x₁ + 4x₂ ≤ 62</li>
+    </ul>
+    <h4>Канонический вид:</h4>
+    <p><strong>Максимизировать</strong><br>F = 3x₁ + 8x₂</p>
+    <p><strong>при ограничениях:</strong></p>
+    <ul>
+      <li>x₁ + 7x₂ + x₃ = 32</li>
+      <li>2x₁ + 5x₂ + x₄ = 42</li>
+      <li>3x₁ + 4x₂ + x₅ = 62</li>
+    </ul>
+    <p><strong>Условие неотрицательности:</strong><br>
+    x₁ ≥ 0, x₂ ≥ 0, x₃ ≥ 0, x₄ ≥ 0, x₅ ≥ 0</p>
+    <p><em>Примечание: Переменные x₃, x₄, x₅ — дополнительные переменные (не искусственные).</em></p>
+  `);
+
+  Lab3.startSolving();
 };
 
 function initLab3() {
-  Lab3.setMode('basis');
+  Lab3.switchMode(1);
 }
