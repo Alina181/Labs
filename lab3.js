@@ -24,8 +24,8 @@ function lab3Template() {
       <button class="action" onclick="Lab3.step()">Следующий шаг</button>
       <button class="action" onclick="Lab3.solveAll()">Решить до конца</button>
       <button class="action" onclick="Lab3.reset()">Сбросить</button>
-      <button class="action" onclick="Lab3.loadExample1()">Пример 1: /button>
-      <button class="action" onclick="Lab3.loadExample2()">Пример 2: </button>
+      <button class="action" onclick="Lab3.loadExample1()">Пример 1: Уравнения с равенствами</button>
+      <button class="action" onclick="Lab3.loadExample2()">Пример 2: Ограничения типа ≤</button>
     </div>
   `;
 }
@@ -265,13 +265,6 @@ Lab3.loadEquationsMode2 = function () {
   originalEqHTML += '</ul>';
   Lab3.appendOutput(originalEqHTML);
 
-  // Правила приведения к каноническому виду:
-  // 1. Все неравенства преобразуются в равенства
-  // 2. Все переменные должны быть неотрицательными
-  // 3. Все правые части должны быть неотрицательными
-  // 4. Добавляем дополнительные переменные для ≤ и ≥
-  // 5. Добавляем искусственные переменные для ≥ и =
-
   let canonicalHTML = '<h3>Канонический вид:</h3><p><strong>' + direction + '</strong><br>F = ';
   
   // Добавляем свободный член
@@ -303,14 +296,12 @@ Lab3.loadEquationsMode2 = function () {
   // Подсчет дополнительных и искусственных переменных
   let slackCount = 0;
   let artificialCount = 0;
-  let eqCounter = 0;
   
   for (let i = 0; i < eqs; i++) {
     if (signs[i] === "le" || signs[i] === "ge") slackCount++;
     if (signs[i] === "ge" || signs[i] === "eq") artificialCount++;
   }
 
-  // Все переменные в каноническом виде обозначаются как x
   let totalVarsInCanonical = n + slackCount + artificialCount;
   let currentVarIndex = n + 1;
   
@@ -332,17 +323,14 @@ Lab3.loadEquationsMode2 = function () {
 
     // Добавляем дополнительные/искусственные переменные
     if (signs[i] === "le") {
-      // Для ≤ добавляем дополнительную переменную x_{n+1}, x_{n+2}, ...
       terms.push("+x" + currentVarIndex);
       currentVarIndex++;
     } else if (signs[i] === "ge") {
-      // Для ≥ добавляем дополнительную переменную с минусом и искусственную
       terms.push("-x" + currentVarIndex);
       currentVarIndex++;
-      terms.push("+x" + currentVarIndex); // Искусственная переменная
+      terms.push("+x" + currentVarIndex);
       currentVarIndex++;
     } else if (signs[i] === "eq") {
-      // Для = добавляем только искусственную переменную
       terms.push("+x" + currentVarIndex);
       currentVarIndex++;
     }
@@ -379,18 +367,14 @@ Lab3.loadEquationsMode2 = function () {
     for (let j = 0; j < n; j++) row[j] = A[i][j];
 
     if (signs[i] === "le") {
-      // Дополнительная переменная (slack)
       row[n + slackIndex] = 1;
       slackIndex++;
     } else if (signs[i] === "ge") {
-      // Дополнительная переменная с минусом
       row[n + slackIndex] = -1;
       slackIndex++;
-      // Искусственная переменная
       row[n + slackCount + artIndex] = 1;
       artIndex++;
     } else {
-      // Искусственная переменная для равенства
       row[n + slackCount + artIndex] = 1;
       artIndex++;
     }
@@ -398,68 +382,75 @@ Lab3.loadEquationsMode2 = function () {
     fullB.push(b[i]);
   }
 
-  const totalRows = eqs + 2;
-  const data = Array(totalRows).fill(null).map(() => Array(1 + totalVars).fill(0));
+  // Определяем, нужно ли создавать M-строку
+  const totalRows = eqs + 1 + (artificialCountActual > 0 ? 1 : 0);
+  const data = Array(totalRows).fill(null).map(() => Array(1 + n).fill(0)); // Только n столбцов для основных переменных
 
   for (let i = 0; i < eqs; i++) {
     data[i][0] = fullB[i];
-    for (let j = 0; j < totalVars; j++) data[i][1 + j] = fullA[i][j];
+    // Только коэффициенты при основных переменных
+    for (let j = 0; j < n; j++) data[i][1 + j] = fullA[i][j];
   }
 
   // Строка целевой функции f
-  data[eqs][0] = f0;
+  const fRow = eqs;
+  data[fRow][0] = f0;
   for (let j = 0; j < n; j++) {
     const coeff = (Lab3.mode === "max") ? -f[j] : f[j];
-    data[eqs][1 + j] = coeff;
+    data[fRow][1 + j] = coeff;
   }
 
   // Строка искусственной целевой функции g (M-строка)
-  data[eqs + 1][0] = 0;
-  for (let i = 0; i < eqs; i++) {
-    if (signs[i] === "ge" || signs[i] === "eq") {
-      data[eqs + 1][0] -= fullB[i];
-      for (let j = 0; j < totalVars; j++) data[eqs + 1][1 + j] -= fullA[i][j];
+  if (artificialCountActual > 0) {
+    const gRow = eqs + 1;
+    data[gRow][0] = 0;
+    for (let i = 0; i < eqs; i++) {
+      if (signs[i] === "ge" || signs[i] === "eq") {
+        data[gRow][0] -= fullB[i];
+        for (let j = 0; j < n; j++) data[gRow][1 + j] -= fullA[i][j];
+      }
     }
   }
 
-  // Формируем метки столбцов (только x)
+  // Формируем метки столбцов: только 1 и основные переменные
   const colLabels = ["1"];
   for (let j = 1; j <= n; j++) colLabels.push(`x${j}`);
-  
-  let varCounter = n + 1;
-  for (let j = 0; j < slackCount; j++) {
-    colLabels.push(`x${varCounter}`);
-    varCounter++;
-  }
-  for (let j = 0; j < artificialCountActual; j++) {
-    colLabels.push(`x${varCounter}`);
-    varCounter++;
-  }
 
   // Формируем метки строк (базисные переменные)
   const rowLabels = [];
-  varCounter = n + 1;
+  let varCounter = n + 1;
   for (let i = 0; i < eqs; i++) {
     if (signs[i] === "le") {
       rowLabels.push(`x${varCounter}`);
       varCounter++;
     } else if (signs[i] === "ge") {
-      rowLabels.push(`x${varCounter + 1}`); // Искусственная переменная
+      rowLabels.push(`x${varCounter + 1}`);
       varCounter += 2;
     } else {
-      rowLabels.push(`x${varCounter}`); // Искусственная переменная
+      rowLabels.push(`x${varCounter}`);
       varCounter++;
     }
   }
   rowLabels.push("f");
-  rowLabels.push("g");
+  if (artificialCountActual > 0) {
+    rowLabels.push("g");
+  }
 
+  // Очищаем нули
   Lab3.currentMatrix = {
     data: data.map(function(row) {
-      return row.map(function(x) { return parseFloat(x.toFixed(10)); });
+      return row.map(function(x) { 
+        const val = parseFloat(x.toFixed(10));
+        return Math.abs(val) < 1e-12 ? 0 : val;
+      });
     }),
     rowLabels: rowLabels,
-    colLabels: colLabels
+    colLabels: colLabels,
+    hasArtificial: artificialCountActual > 0,
+    fullA: fullA,
+    fullB: fullB,
+    n: n,
+    eqs: eqs
   };
 
   Lab3.startSolving();
@@ -467,38 +458,36 @@ Lab3.loadEquationsMode2 = function () {
 
 // =============== Общая логика построения М-таблицы ===============
 Lab3.buildMTableFromData = function (m, n, A, b, f, f0 = 0) {
-  const totalCols = 1 + n + m;
-  const totalRows = m + 2;
+  const totalCols = 1 + n; // Только 1 + основные переменные
+  const totalRows = m + 1 + 1; // ограничения + f + g
+  
   const data = Array(totalRows).fill(null).map(() => Array(totalCols).fill(0));
 
-  // Заполняем ограничения (предполагаем, что все ограничения типа ≤)
+  // Заполняем ограничения
   for (let i = 0; i < m; i++) {
     data[i][0] = b[i];
     for (let j = 0; j < n; j++) data[i][1 + j] = A[i][j];
-    data[i][1 + n + i] = 1; // Дополнительные переменные
   }
 
   // Строка целевой функции f
-  data[m][0] = f0;
+  const fRow = m;
+  data[fRow][0] = f0;
   for (let j = 0; j < n; j++) {
     const coeff = (Lab3.mode === "max") ? -f[j] : f[j];
-    data[m][1 + j] = coeff;
+    data[fRow][1 + j] = coeff;
   }
 
   // Строка искусственной целевой функции g
-  // В режиме 1 предполагаем, что нет искусственных переменных,
-  // поэтому строка g будет нулевой (или с коэффициентами от дополнительных переменных)
-  data[m + 1][0] = 0;
-  for (let j = 0; j < n; j++) {
-    data[m + 1][1 + j] = 0;
-  }
-  for (let i = 0; i < m; i++) {
-    data[m + 1][1 + n + i] = -1; // Для дополнительных переменных в g строке
+  const gRow = m + 1;
+  data[gRow][0] = 0;
+  
+  // В режиме 1 g строка не используется, оставляем нули
+  for (let j = 1; j <= n; j++) {
+    data[gRow][j] = 0;
   }
 
   const colLabels = ["1"];
   for (let j = 1; j <= n; j++) colLabels.push(`x${j}`);
-  for (let i = 1; i <= m; i++) colLabels.push(`x${n + i}`);
 
   const rowLabels = [];
   for (let i = 1; i <= m; i++) rowLabels.push(`x${n + i}`);
@@ -507,10 +496,16 @@ Lab3.buildMTableFromData = function (m, n, A, b, f, f0 = 0) {
 
   Lab3.currentMatrix = {
     data: data.map(function(row) {
-      return row.map(function(x) { return parseFloat(x.toFixed(10)); });
+      return row.map(function(x) { 
+        const val = parseFloat(x.toFixed(10));
+        return Math.abs(val) < 1e-12 ? 0 : val;
+      });
     }),
     rowLabels: rowLabels,
-    colLabels: colLabels
+    colLabels: colLabels,
+    hasArtificial: false,
+    m: m,
+    n: n
   };
 
   Lab3.startSolving();
@@ -520,7 +515,7 @@ Lab3.buildMTableFromData = function (m, n, A, b, f, f0 = 0) {
 Lab3.startSolving = function () {
   Lab3.iteration = 0;
   Lab3.status = "solving";
-  Lab3.appendOutput('<h3>Начальная М-таблица (направление: ' + Lab3.mode + '):</h3>');
+  Lab3.appendOutput('<h3>Начальная таблица (направление: ' + Lab3.mode + '):</h3>');
   Lab3.renderCurrentStep();
 };
 
@@ -574,8 +569,9 @@ Lab3.formatSolution = function (M) {
     }
   }
 
-  let fVal = M.data[M.data.length - 2][0];
-  let gVal = M.data[M.data.length - 1][0];
+  let fVal = M.data[M.rowLabels.indexOf("f")][0];
+  let gRowIndex = M.rowLabels.indexOf("g");
+  let gVal = gRowIndex >= 0 ? M.data[gRowIndex][0] : 0;
   let fStr = "";
   
   // Учитываем направление оптимизации при выводе значения F
@@ -624,7 +620,10 @@ Lab3.copyMatrix = function (M) {
   return {
     data: M.data.map(function(row) { return row.slice(); }),
     rowLabels: M.rowLabels.slice(),
-    colLabels: M.colLabels.slice()
+    colLabels: M.colLabels.slice(),
+    hasArtificial: M.hasArtificial || false,
+    m: M.m || 0,
+    n: M.n || 0
   };
 };
 
@@ -662,24 +661,54 @@ Lab3.getKS = function (M) {
   const cols = M.data[0].length;
   if (rows < 1 || cols < 2) return { k: -1, s: -1 };
 
-  // Для задачи max выбираем минимальный отрицательный в строке g
-  // Для задачи min выбираем максимальный положительный в строке g
-  const gRow = M.data[rows - 1].slice(1);
+  // Определяем, по какой строке искать разрешающий столбец
+  let targetRow = rows - 1;
+  if (!M.hasArtificial && rows > 0) {
+    targetRow = rows - 1;
+  }
+
+  const searchRow = M.data[targetRow].slice(1);
   let pivotColIdx = -1;
 
   if (Lab3.mode === "max") {
-    let minVal = Math.min.apply(null, gRow);
-    if (minVal >= -1e-10) return { k: -1, s: -1 };
-    pivotColIdx = gRow.indexOf(minVal);
+    let minVal = Math.min.apply(null, searchRow);
+    if (targetRow === rows - 1 && M.hasArtificial) {
+      if (minVal >= -1e-10) {
+        const fRowIdx = rows - 2;
+        const fRow = M.data[fRowIdx].slice(1);
+        minVal = Math.min.apply(null, fRow);
+        if (minVal >= -1e-10) return { k: -1, s: -1 };
+        pivotColIdx = fRow.indexOf(minVal);
+        targetRow = fRowIdx;
+      } else {
+        pivotColIdx = searchRow.indexOf(minVal);
+      }
+    } else {
+      if (minVal >= -1e-10) return { k: -1, s: -1 };
+      pivotColIdx = searchRow.indexOf(minVal);
+    }
   } else {
-    let maxVal = Math.max.apply(null, gRow);
-    if (maxVal <= 1e-10) return { k: -1, s: -1 };
-    pivotColIdx = gRow.indexOf(maxVal);
+    let maxVal = Math.max.apply(null, searchRow);
+    if (targetRow === rows - 1 && M.hasArtificial) {
+      if (maxVal <= 1e-10) {
+        const fRowIdx = rows - 2;
+        const fRow = M.data[fRowIdx].slice(1);
+        maxVal = Math.max.apply(null, fRow);
+        if (maxVal <= 1e-10) return { k: -1, s: -1 };
+        pivotColIdx = fRow.indexOf(maxVal);
+        targetRow = fRowIdx;
+      } else {
+        pivotColIdx = searchRow.indexOf(maxVal);
+      }
+    } else {
+      if (maxVal <= 1e-10) return { k: -1, s: -1 };
+      pivotColIdx = searchRow.indexOf(maxVal);
+    }
   }
 
   const pivotCol = pivotColIdx + 1;
   let pivotRow = -1, minRatio = Infinity;
-  for (let i = 0; i < rows - 2; i++) {
+  for (let i = 0; i < rows - (M.hasArtificial ? 2 : 1); i++) {
     const a = M.data[i][pivotCol];
     if (a > 1e-10) {
       const ratio = M.data[i][0] / a;
@@ -696,27 +725,24 @@ Lab3.getKS = function (M) {
 
 Lab3.step = function () {
   if (!Lab3.currentMatrix || Lab3.status !== "solving") {
-    alert("Сначала постройте М-таблицу!");
+    alert("Сначала постройте таблицу!");
     return;
   }
 
   let ks = Lab3.getKS(Lab3.currentMatrix);
   if (ks.k === -1 && ks.s === -1) {
-    // Проверяем, есть ли искусственные переменные в базисе
     let hasArtificialInBasis = false;
-    for (let i = 0; i < Lab3.currentMatrix.rowLabels.length - 2; i++) {
-      let label = Lab3.currentMatrix.rowLabels[i];
-      // Искусственные переменные - это те, которые были добавлены для ≥ и =
-      // В нашем обозначении это x с большими номерами
-      // Более точная проверка потребовала бы отслеживания, какие переменные искусственные
-      if (label.startsWith('x')) {
-        let num = parseInt(label.substring(1));
-        // Простая эвристика: если номер переменной больше общего числа исходных переменных + ограничений
-        // то это может быть искусственная переменная
-        let totalVars = Lab3.currentMatrix.colLabels.length - 1;
-        if (num > totalVars / 2) {
-          hasArtificialInBasis = true;
-          break;
+    if (Lab3.currentMatrix.hasArtificial) {
+      for (let i = 0; i < Lab3.currentMatrix.rowLabels.length - 2; i++) {
+        let label = Lab3.currentMatrix.rowLabels[i];
+        if (label.startsWith('x')) {
+          let num = parseInt(label.substring(1));
+          let totalOriginalVars = Lab3.currentMatrix.colLabels.length - 1;
+          let totalRows = Lab3.currentMatrix.rowLabels.length - (Lab3.currentMatrix.hasArtificial ? 2 : 1);
+          if (num > totalOriginalVars - totalRows) {
+            hasArtificialInBasis = true;
+            break;
+          }
         }
       }
     }
@@ -751,23 +777,25 @@ Lab3.step = function () {
 
 Lab3.solveAll = function () {
   if (!Lab3.currentMatrix || Lab3.status !== "solving") {
-    alert("Сначала постройте М-таблицу!");
+    alert("Сначала постройте таблицу!");
     return;
   }
 
   while (Lab3.status === "solving" && Lab3.iteration < Lab3.maxIterations) {
     let ks = Lab3.getKS(Lab3.currentMatrix);
     if (ks.k === -1 && ks.s === -1) {
-      // Проверяем, есть ли искусственные переменные в базисе
       let hasArtificialInBasis = false;
-      for (let i = 0; i < Lab3.currentMatrix.rowLabels.length - 2; i++) {
-        let label = Lab3.currentMatrix.rowLabels[i];
-        if (label.startsWith('x')) {
-          let num = parseInt(label.substring(1));
-          let totalVars = Lab3.currentMatrix.colLabels.length - 1;
-          if (num > totalVars / 2) {
-            hasArtificialInBasis = true;
-            break;
+      if (Lab3.currentMatrix.hasArtificial) {
+        for (let i = 0; i < Lab3.currentMatrix.rowLabels.length - 2; i++) {
+          let label = Lab3.currentMatrix.rowLabels[i];
+          if (label.startsWith('x')) {
+            let num = parseInt(label.substring(1));
+            let totalOriginalVars = Lab3.currentMatrix.colLabels.length - 1;
+            let totalRows = Lab3.currentMatrix.rowLabels.length - (Lab3.currentMatrix.hasArtificial ? 2 : 1);
+            if (num > totalOriginalVars - totalRows) {
+              hasArtificialInBasis = true;
+              break;
+            }
           }
         }
       }
@@ -812,29 +840,24 @@ Lab3.loadExample1 = function () {
   const eqs = 3;
   const n = 5;
   
-  // Все ограничения типа =, поэтому только искусственные переменные
-  const slackCount = 0;
-  const artificialCount = 3;
-  
-  const totalVars = n + slackCount + artificialCount;
+  const totalVars = n + eqs; // Основные + искусственные
   const fullA = [];
   const fullB = [];
 
   for (let i = 0; i < eqs; i++) {
     const row = new Array(totalVars).fill(0);
     for (let j = 0; j < n; j++) row[j] = A[i][j];
-    // Добавляем искусственные переменные
-    row[n + slackCount + i] = 1;
+    row[n + i] = 1; // Искусственные переменные
     fullA.push(row);
     fullB.push(b[i]);
   }
 
   const totalRows = eqs + 2;
-  const data = Array(totalRows).fill(null).map(() => Array(1 + totalVars).fill(0));
+  const data = Array(totalRows).fill(null).map(() => Array(1 + n).fill(0)); // Только n столбцов
 
   for (let i = 0; i < eqs; i++) {
     data[i][0] = fullB[i];
-    for (let j = 0; j < totalVars; j++) data[i][1 + j] = fullA[i][j];
+    for (let j = 0; j < n; j++) data[i][1 + j] = fullA[i][j];
   }
 
   // Строка целевой функции f
@@ -846,7 +869,7 @@ Lab3.loadExample1 = function () {
 
   // Строка искусственной целевой функции g
   data[eqs + 1][0] = -b.reduce((a, x) => a + x, 0);
-  for (let j = 0; j < totalVars; j++) {
+  for (let j = 0; j < n; j++) {
     let sum = 0;
     for (let i = 0; i < eqs; i++) sum += fullA[i][j];
     data[eqs + 1][1 + j] = -sum;
@@ -854,17 +877,22 @@ Lab3.loadExample1 = function () {
 
   const colLabels = ["1"];
   for (let j = 1; j <= n; j++) colLabels.push(`x${j}`);
-  for (let j = 1; j <= artificialCount; j++) colLabels.push(`x${n + j}`);
 
   const rowLabels = [];
-  for (let i = 1; i <= artificialCount; i++) rowLabels.push(`x${n + i}`);
+  for (let i = 1; i <= eqs; i++) rowLabels.push(`x${n + i}`);
   rowLabels.push("f");
   rowLabels.push("g");
 
   Lab3.currentMatrix = {
-    data: data,
+    data: data.map(function(row) {
+      return row.map(function(x) { 
+        const val = parseFloat(x.toFixed(10));
+        return Math.abs(val) < 1e-12 ? 0 : val;
+      });
+    }),
     rowLabels: rowLabels,
-    colLabels: colLabels
+    colLabels: colLabels,
+    hasArtificial: true
   };
 
   Lab3.appendOutput(`
@@ -876,50 +904,31 @@ Lab3.loadExample1 = function () {
       <li>x₂ - 3x₃ + 4x₄ - 5x₅ = 6</li>
       <li>x₂ - x₃ + x₄ - x₅ = 1</li>
     </ul>
-    <h4>Канонический вид:</h4>
-    <p><strong>Максимизировать</strong><br>F = -2x₁ - 6x₂ + 5x₃ - x₄ - 4x₅</p>
-    <p><strong>при ограничениях:</strong></p>
-    <ul>
-      <li>x₁ - 4x₂ + 2x₃ - 5x₄ + 9x₅ + x₆ = 3</li>
-      <li>x₂ - 3x₃ + 4x₄ - 5x₅ + x₇ = 6</li>
-      <li>x₂ - x₃ + x₄ - x₅ + x₈ = 1</li>
-    </ul>
-    <p><strong>Условие неотрицательности:</strong><br>
-    x₁ ≥ 0, x₂ ≥ 0, x₃ ≥ 0, x₄ ≥ 0, x₅ ≥ 0, x₆ ≥ 0, x₇ ≥ 0, x₈ ≥ 0</p>
-    <p><em>Примечание: Переменные x₆, x₇, x₈ — искусственные переменные.</em></p>
+    <h4>Начальная М-таблица:</h4>
   `);
 
   Lab3.startSolving();
 };
 
-// =============== Пример 2: Таблица (как в Python)
+// =============== Пример 2: Ограничения типа ≤
 Lab3.loadExample2 = function () {
-  // Данные из вашего Python-кода
-  const data = [
-    [32, 1, 7, 1, 0, 0],
-    [42, 2, 5, 0, 1, 0],
-    [62, 3, 4, 0, 0, 1],
-    [0, -3, -8, 0, 0, 0],  // F строка (max: F = 3x₁ + 8x₂)
-    [0, 0, 0, 0, 0, 0],    // Исходная строка f
-    [-136, -6, -16, -1, -1, -1]  // Строка g (M-строка)
-  ].map(row => row.map(x => parseFloat(x)));
-
-  const rows = data.length;
-  const cols = data[0].length;
-
-  const colLabels = ["1", "x1", "x2", "x3", "x4", "x5"];
-  const rowLabels = ["x3", "x4", "x5", "f", "g"];
-
+  const m = 3;
+  const n = 2;
   Lab3.mode = "max";
-  
-  Lab3.currentMatrix = {
-    data: data,
-    rowLabels: rowLabels,
-    colLabels: colLabels
-  };
+
+  const A = [
+    [1, 7],
+    [2, 5],
+    [3, 4]
+  ];
+  const b = [32, 42, 62];
+  const f = [3, 8];
+  const f0 = 0;
+
+  Lab3.buildMTableFromData(m, n, A, b, f, f0);
 
   Lab3.appendOutput(`
-    <h3>Пример 2: Таблица (аналог Python-кода) (направление: ${Lab3.mode})</h3>
+    <h3>Пример 2: Ограничения типа ≤ (направление: ${Lab3.mode})</h3>
     <p><strong>Максимизировать</strong><br>F = 3x₁ + 8x₂</p>
     <p><strong>при ограничениях:</strong></p>
     <ul>
@@ -927,20 +936,7 @@ Lab3.loadExample2 = function () {
       <li>2x₁ + 5x₂ ≤ 42</li>
       <li>3x₁ + 4x₂ ≤ 62</li>
     </ul>
-    <h4>Канонический вид:</h4>
-    <p><strong>Максимизировать</strong><br>F = 3x₁ + 8x₂</p>
-    <p><strong>при ограничениях:</strong></p>
-    <ul>
-      <li>x₁ + 7x₂ + x₃ = 32</li>
-      <li>2x₁ + 5x₂ + x₄ = 42</li>
-      <li>3x₁ + 4x₂ + x₅ = 62</li>
-    </ul>
-    <p><strong>Условие неотрицательности:</strong><br>
-    x₁ ≥ 0, x₂ ≥ 0, x₃ ≥ 0, x₄ ≥ 0, x₅ ≥ 0</p>
-    <p><em>Примечание: Переменные x₃, x₄, x₅ — дополнительные переменные (не искусственные).</em></p>
   `);
-
-  Lab3.startSolving();
 };
 
 function initLab3() {
