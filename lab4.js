@@ -1,4 +1,3 @@
-// lab4.js
 function lab4Template() {
   return `
     <h2>Лабораторная 4: Транспортная задача</h2>

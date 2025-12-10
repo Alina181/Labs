@@ -72,14 +72,12 @@ Lab2.createTableInputs = function() {
   const container = document.getElementById('lab2-table-container');
   let html = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">';
   
-  // Заголовки
   html += '<tr><th></th>';
   for (let j = 0; j < n; j++) {
     html += `<th>x${j + 1}</th>`;
   }
   html += '<th>Св.член</th></tr>';
 
-  // Строки ввода
   for (let i = 0; i < m; i++) {
     html += '<tr>';
     html += `<td style="background:#f0f0f0;">Ур.${i + 1}</td>`;
@@ -126,7 +124,6 @@ Lab2.startSteps = function() {
 Lab2.getExample = function(id) {
   switch (id) {
     case 1:
-      // 3 уравнения, 3 переменные, единственное решение
       return {
         m: 3,
         n: 4,
@@ -137,7 +134,6 @@ Lab2.getExample = function(id) {
         ]
       };
     case 2:
-      // 2 уравнения, 3 переменные, бесконечно много решений
       return {
         m: 3,
         n: 3,
@@ -148,7 +144,6 @@ Lab2.getExample = function(id) {
         ]
       };
     case 3:
-      // 2 уравнения, 2 переменные, несовместна
       return {
         m: 3,
         n: 3,
@@ -159,7 +154,6 @@ Lab2.getExample = function(id) {
         ]
       };
     case 4:
-      // Другая система 3×3 с единственным решением
       return {
         m: 3,
         n: 5,
@@ -170,7 +164,6 @@ Lab2.getExample = function(id) {
         ]
       };
     case 5:
-      // 2 уравнения, 4 переменные, 2 свободные
       return {
         m: 2,
         n: 4,
@@ -202,12 +195,10 @@ Lab2.loadExample = function() {
   Lab2.n = ex.n;
   Lab2.matrix = ex.matrix.map(row => [...row]);
 
-  // Обновляем поля ввода
   document.getElementById('lab2-rows').value = Lab2.m;
   document.getElementById('lab2-cols').value = Lab2.n;
   Lab2.createTableInputs();
 
-  // Заполняем значения
   for (let i = 0; i < Lab2.m; i++) {
     for (let j = 0; j < Lab2.n + 1; j++) {
       const el = document.getElementById(`lab2-cell-${i}-${j}`);
@@ -254,12 +245,10 @@ Lab2.choosePivot = function(r, c) {
 
   const pivot = Lab2.matrix[r][c];
 
-  // Нормализация строки
   for (let j = 0; j < Lab2.n + 1; j++) {
     Lab2.matrix[r][j] /= pivot;
   }
 
-  // Обнуление других строк
   for (let i = 0; i < Lab2.m; i++) {
     if (i === r) continue;
     const factor = Lab2.matrix[i][c];
@@ -277,7 +266,6 @@ Lab2.choosePivot = function(r, c) {
 };
 
 Lab2.checkStatus = function() {
-  // Проверка на несовместность
   let inconsistent = false;
   for (let i = 0; i < Lab2.m; i++) {
     let allZero = true;
@@ -345,7 +333,6 @@ Lab2.checkStatus = function() {
     return;
   }
 
-  // Единственное решение
   const sol = Array(Lab2.n).fill(0);
   for (let i = 0; i < Lab2.m; i++) {
     for (let j = 0; j < Lab2.n; j++) {
@@ -366,5 +353,4 @@ Lab2.showMessage = function(text) {
 };
 
 function initLab2() {
-  // Nothing special needed
 }
