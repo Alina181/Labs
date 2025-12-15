@@ -33,8 +33,8 @@ function lab3Template() {
 }
 
 Lab3.setupInput = function () {
-    const m = parseInt(document.getElementById("lab3-constraints").value) || 3;
-    const n = parseInt(document.getElementById("lab3-vars").value) || 3;
+    const m = parseInt(document.getElementById("lab3-constraints").value) || 5;
+    const n = parseInt(document.getElementById("lab3-vars").value) || 5;
 
     let html = '<h3>Ограничения (в виде равенств)</h3><table border="1" cellpadding="5" cellspacing="0">';
     html += '<tr><th></th><th>Свободный член</th>';
@@ -44,9 +44,10 @@ Lab3.setupInput = function () {
     html += '</tr>';
 
     const exampleConstraints = [
-        [32, 1, 7],
-        [42, 2, 5],
-        [62, 3, 4]
+        [32, 1, 7, 1, 0, 0],
+        [42, 2, 5, 0, 1, 0],
+        [62, 3, 4, 0, 0, 1],
+        [34, 2, 1, 0, 0, 0],
     ];
 
     for (let i = 0; i < m; i++) {
@@ -63,7 +64,7 @@ Lab3.setupInput = function () {
 
     html += '<h3>Целевая функция F → max</h3><table border="1" cellpadding="5" cellspacing="0">';
     html += '<tr><th>F</th><td>0</td>';
-    const exampleF = [-2, -1];
+    const exampleF = [3, 8, 0, 0, 0];
     for (let j = 1; j <= n; j++) {
         const val = exampleF[j - 1] ?? (j === 1 ? -2 : j === 2 ? -1 : 0);
         html += `<td><input type="number" id="f-coeff-${j}" value="${val}" step="any" style="width:60px;"></td>`;
@@ -103,10 +104,12 @@ Lab3.buildTable = function () {
     const totalRows = m + 2;
     const matrix = Array.from({ length: totalRows }, () => Array(totalCols).fill(0));
 
+    // Создаём метки столбцов: 1, x1, x2, ..., xn, y1, y2, ..., ym
     const colLabels = ["1"];
     for (let j = 1; j <= n; j++) colLabels.push(`x${j}`);
     for (let j = 1; j <= m; j++) colLabels.push(`y${j}`);
 
+    // Создаём метки строк: y1, y2, ..., ym, f, g
     const rowLabels = [];
     for (let i = 1; i <= m; i++) rowLabels.push(`y${i}`);
     rowLabels.push("f");
@@ -144,12 +147,17 @@ Lab3.buildTable = function () {
     Lab3.logStep("Исходная таблица построена.");
 };
 
-Lab3.getDisplayRowLabel = function (fullLabel) {
-    if (fullLabel.startsWith("y")) {
-        const idx = parseInt(fullLabel.slice(1), 10);
+// Функция для преобразования метки искусственной переменной в xN
+Lab3.toXLabel = function (label) {
+    if (label.startsWith("y")) {
+        const idx = parseInt(label.slice(1), 10);
         return `x${Lab3.nOrig + idx}`;
     }
-    return fullLabel;
+    return label;
+};
+
+Lab3.getDisplayRowLabel = function (fullLabel) {
+    return Lab3.toXLabel(fullLabel); // Применяем ко всем строкам
 };
 
 Lab3.getDisplayMatrix = function () {
@@ -166,9 +174,10 @@ Lab3.renderAndAppendTable = function (title = "") {
     div.style.marginTop = "20px";
 
     let html = `<h4>${title}</h4><table border="1" cellpadding="6" cellspacing="0" style="display:inline-block;">`;
-    html += '<tr><th></th><th>1</th>';
-    for (let j = 1; j <= Lab3.nOrig; j++) {
-        html += `<th>x${j}</th>`;
+    html += '<tr><th></th>';
+    // Используем текущие метки столбцов, но преобразуем их через toXLabel
+    for (let j = 0; j <= Lab3.nOrig; j++) {
+        html += `<th>${Lab3.toXLabel(Lab3.colLabelsFull[j])}</th>`;
     }
     html += '</tr>';
 
@@ -272,7 +281,14 @@ Lab3.jordanSubFakeBasis = function (k, s) {
     const cols = Lab3.fullMatrix[0].length;
     const newMatrix = Array.from({ length: rows }, () => Array(cols).fill(0));
 
+    // Обмен меток
     [Lab3.colLabelsFull[s], Lab3.rowLabelsFull[k]] = [Lab3.rowLabelsFull[k], Lab3.colLabelsFull[s]];
+
+    // После обмена — преобразуем метку столбца, если она стала искусственной (начинается с 'y')
+    // Это важно: теперь в столбце может быть 'yN', но мы хотим видеть 'xN'
+    if (Lab3.colLabelsFull[s].startsWith("y")) {
+        Lab3.colLabelsFull[s] = Lab3.toXLabel(Lab3.colLabelsFull[s]);
+    }
 
     for (let j = 0; j < cols; j++) {
         newMatrix[k][j] = Lab3.fullMatrix[k][j] / permissive;
@@ -319,7 +335,7 @@ Lab3.solveStep = function () {
 
     Lab3.iteration++;
     Lab3.logStep(`--- Итерация ${Lab3.iteration} ---`);
-    Lab3.logStep(`Разрешающий элемент: строка ${Lab3.getDisplayRowLabel(Lab3.rowLabelsFull[k])}, столбец ${Lab3.colLabelsFull[s]}`);
+    Lab3.logStep(`Разрешающий элемент: строка ${Lab3.getDisplayRowLabel(Lab3.rowLabelsFull[k])}, столбец ${Lab3.toXLabel(Lab3.colLabelsFull[s])}`);
 
     try {
         Lab3.jordanSubFakeBasis(k, s);

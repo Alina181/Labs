@@ -43,15 +43,14 @@ const TransportLab = {
   currentCycle: null,
   cycleMarks: [],
   evaluations: [],
-  isOptimal: false
+  isOptimal: false,
+  solutionTables: [] // Для хранения таблиц решения по шагам
 };
 
 TransportLab.loadExample = function() {
   document.getElementById('suppliers').value = 4;
   document.getElementById('consumers').value = 5;
-  
   this.setup();
-  
   setTimeout(() => {
     const exampleCosts = [
       [17, 20, 29, 26, 25],
@@ -78,7 +77,6 @@ TransportLab.loadExample = function() {
       const input = document.querySelector(`.demand-cell[data-j="${j}"]`);
       if (input) input.value = exampleDemand[j];
     }
-    
     this.logStep('Загружен пример из задания.');
   }, 100);
 };
@@ -86,7 +84,6 @@ TransportLab.loadExample = function() {
 TransportLab.setup = function () {
   const m = parseInt(document.getElementById('suppliers').value) || 4;
   const n = parseInt(document.getElementById('consumers').value) || 5;
-
   this.m = m;
   this.n = n;
   this.resetState();
@@ -117,9 +114,8 @@ TransportLab.setup = function () {
   }
   dataHtml += '<td></td></tr>';
   dataHtml += '</table>';
-
   dataHtml += '<br><button class="action" onclick="TransportLab.load()">Загрузить данные</button>';
-  
+
   document.getElementById('data-table-container').innerHTML = dataHtml;
   document.getElementById('plan-table-container').innerHTML = '';
   document.getElementById('solution-table-container').innerHTML = '';
@@ -130,7 +126,6 @@ TransportLab.setup = function () {
 TransportLab.load = function () {
   const m = this.m;
   const n = this.n;
-
   this.costs = [];
   this.supply = [];
   this.demand = [];
@@ -158,9 +153,8 @@ TransportLab.load = function () {
     totalDemand += val;
   }
 
-  const diff = Math.abs(totalSupply - totalDemand);
-  if (diff > 1e-6) {
-    alert(`Задача должна быть закрытой!\nСумма запасов: ${totalSupply}\nСумма потребностей: ${totalDemand}\nРазница: ${diff}`);
+  if (Math.abs(totalSupply - totalDemand) > 1e-6) {
+    alert(`Задача должна быть закрытой!\nСумма запасов: ${totalSupply}\nСумма потребностей: ${totalDemand}`);
     return;
   }
 
@@ -209,17 +203,13 @@ TransportLab.showPlanInput = function () {
 TransportLab.useMinElement = function() {
   const m = this.m;
   const n = this.n;
-  
   let supplyCopy = [...this.supply];
   let demandCopy = [...this.demand];
-  
   this.plan = Array(m).fill().map(() => Array(n).fill(0));
-  
+
   while (supplyCopy.some(s => s > 0) && demandCopy.some(d => d > 0)) {
     let minCost = Infinity;
-    let minI = -1;
-    let minJ = -1;
-    
+    let minI = -1, minJ = -1;
     for (let i = 0; i < m; i++) {
       for (let j = 0; j < n; j++) {
         if (supplyCopy[i] > 0 && demandCopy[j] > 0 && this.costs[i][j] < minCost) {
@@ -229,15 +219,12 @@ TransportLab.useMinElement = function() {
         }
       }
     }
-    
     if (minI === -1) break;
-    
     const amount = Math.min(supplyCopy[minI], demandCopy[minJ]);
     this.plan[minI][minJ] = amount;
     supplyCopy[minI] -= amount;
     demandCopy[minJ] -= amount;
   }
-  
   this.logStep('Начальный план создан методом минимального элемента.');
   this.validateAndProceed();
 };
@@ -246,11 +233,9 @@ TransportLab.useNorthwest = function () {
   const m = this.m;
   const n = this.n;
   this.plan = Array(m).fill().map(() => Array(n).fill(0));
-
   let i = 0, j = 0;
   let supplyCopy = [...this.supply];
   let demandCopy = [...this.demand];
-
   while (i < m && j < n) {
     const amount = Math.min(supplyCopy[i], demandCopy[j]);
     this.plan[i][j] = amount;
@@ -259,7 +244,6 @@ TransportLab.useNorthwest = function () {
     if (supplyCopy[i] === 0) i++;
     if (demandCopy[j] === 0) j++;
   }
-
   this.logStep('Начальный план создан методом северо-западного угла.');
   this.validateAndProceed();
 };
@@ -268,7 +252,6 @@ TransportLab.useCustomPlan = function () {
   const m = this.m;
   const n = this.n;
   this.plan = Array(m).fill().map(() => Array(n).fill(0));
-
   for (let i = 0; i < m; i++) {
     for (let j = 0; j < n; j++) {
       const val = parseFloat(document.querySelector(`.plan-cell[data-i="${i}"][data-j="${j}"]`).value) || 0;
@@ -279,7 +262,6 @@ TransportLab.useCustomPlan = function () {
       this.plan[i][j] = val;
     }
   }
-
   for (let i = 0; i < m; i++) {
     const rowSum = this.plan[i].reduce((a, b) => a + b, 0);
     if (Math.abs(rowSum - this.supply[i]) > 1e-6) {
@@ -287,35 +269,23 @@ TransportLab.useCustomPlan = function () {
       return;
     }
   }
-
   for (let j = 0; j < n; j++) {
     let colSum = 0;
-    for (let i = 0; i < m; i++) {
-      colSum += this.plan[i][j];
-    }
+    for (let i = 0; i < m; i++) colSum += this.plan[i][j];
     if (Math.abs(colSum - this.demand[j]) > 1e-6) {
       alert(`Ошибка: сумма перевозок к потребителю B${j + 1} (${colSum}) ≠ потребности (${this.demand[j]}).`);
       return;
     }
   }
-
-  let basisCount = 0;
-  for (let i = 0; i < m; i++) {
-    for (let j = 0; j < n; j++) {
-      if (this.plan[i][j] > 0) basisCount++;
-    }
-  }
-
+  let basisCount = this.plan.flat().filter(x => x > 0).length;
   if (basisCount > m + n - 1) {
     alert(`План не может содержать больше ${m + n - 1} базисных клеток! Текущее: ${basisCount}.`);
     return;
   }
-
   if (basisCount === 0) {
     alert('План не может быть пустым!');
     return;
   }
-
   this.logStep('Используется пользовательский начальный план.');
   this.validateAndProceed();
 };
@@ -326,7 +296,9 @@ TransportLab.validateAndProceed = function() {
   this.state = 'optimizing';
   this.iteration = 0;
   this.isOptimal = false;
-  this.renderSolutionTable();
+  this.solutionTables = [];
+  this.cycleMarks = [];
+  this.addSolutionTable('Начальный опорный план');
   this.logStep(`Начальный план загружен. Целевая функция F = ${this.currentF}`);
 };
 
@@ -334,63 +306,60 @@ TransportLab.renderSolutionTable = function () {
   const m = this.m;
   const n = this.n;
   
-  let solutionHtml = '<h3>3. Решение задачи (итерация ' + this.iteration + ')</h3>';
-  solutionHtml += '<p>Текущее значение целевой функции: <strong>F = ' + this.currentF + '</strong></p>';
-  
+  // Создаем таблицу решения
+  let solutionHtml = `<div class="solution-table-container">`;
+  solutionHtml += `<h3>Решение задачи (итерация ${this.iteration})</h3>`;
+  solutionHtml += `<p>Текущее значение целевой функции: <strong>F = ${this.currentF}</strong></p>`;
+
   if (this.isOptimal) {
-    solutionHtml += '<div style="background:#d4edda; padding:10px; border-radius:4px; margin:10px 0;">';
-    solutionHtml += '<strong>✓ План оптимален!</strong>';
-    solutionHtml += '</div>';
+    solutionHtml += '<div style="background:#d4edda; padding:10px; border-radius:4px; margin:10px 0;"><strong>✓ План оптимален!</strong></div>';
   }
-  
+
+  this.calculatePotentials();
+
   solutionHtml += '<table border="1" cellpadding="8" cellspacing="0" class="solution-table">';
-  
   solutionHtml += '<tr><th></th>';
   for (let j = 0; j < n; j++) {
-    const v = this.potentials.v[j] !== undefined ? this.potentials.v[j].toFixed(2) : '';
+    const v = this.potentials.v[j] !== null ? this.potentials.v[j].toFixed(2) : '';
     solutionHtml += `<th style="position:relative; min-width:80px;">B<sub>${j + 1}</sub><div style="position:absolute;top:2px;right:4px;color:#555;font-size:11px;">v=${v}</div></th>`;
   }
   solutionHtml += `<th style="min-width:80px;">Запасы</th></tr>`;
 
   for (let i = 0; i < m; i++) {
-    const u = this.potentials.u[i] !== undefined ? this.potentials.u[i].toFixed(2) : '';
+    const u = this.potentials.u[i] !== null ? this.potentials.u[i].toFixed(2) : '';
     solutionHtml += `<tr><td style="position:relative;">A<sub>${i + 1}</sub><div style="position:absolute;top:2px;right:4px;color:#555;font-size:11px;">u=${u}</div></td>`;
     for (let j = 0; j < n; j++) {
       const cost = this.costs[i][j];
       const x = this.plan[i][j];
       let cellContent = '';
-      let cellClass = '';
-      
-      if (x > 0) {
-        cellClass = 'basis-cell';
-      }
-      
-      const cycleMark = this.cycleMarks.find(mark => mark.i === i && mark.j === j);
-      if (cycleMark) {
-        const symbol = cycleMark.sign === 1 ? '+' : '-';
-        const color = cycleMark.sign === 1 ? '#2ecc71' : '#e74c3c';
-        cellContent += `<div style="position:absolute;top:3px;left:3px;font-weight:bold;color:${color};font-size:16px;">${symbol}</div>`;
-      }
-      
-      if (this.currentPivot && this.currentPivot.i === i && this.currentPivot.j === j) {
-        cellContent += `<div style="position:absolute;bottom:3px;right:3px;font-weight:bold;color:#e74c3c;font-size:11px;">ввод</div>`;
-      }
-      
+
       if (x > 0) {
         cellContent += `<div style="font-weight:bold;">${x}</div>`;
       } else if (x === 0) {
         cellContent += `<div style="color:#bbb;">0</div>`;
       }
-      
+
       cellContent += `<div style="position:absolute;top:2px;right:4px;font-size:10px;color:#888;">${cost}</div>`;
-      
+
+      const cycleMark = this.cycleMarks.find(mark => mark.i === i && mark.j === j);
+      if (cycleMark) {
+        const symbol = cycleMark.sign === 1 ? '+' : '-';
+        const color = cycleMark.sign === 1 ? '#2ecc71' : '#e74c3c';
+        cellContent += `<div style="position:absolute;top:3px;left:3px;font-weight:bold;color:${color};font-size:18px; line-height:1;">${symbol}</div>`;
+      }
+
+      if (this.currentPivot && this.currentPivot.i === i && this.currentPivot.j === j) {
+        cellContent += `<div style="position:absolute;bottom:3px;right:3px;font-weight:bold;color:#e74c3c;font-size:11px;">ввод</div>`;
+      }
+
       if (this.evaluations[i] && this.evaluations[i][j] !== undefined && this.plan[i][j] === 0) {
         const evalVal = this.evaluations[i][j];
         const evalColor = evalVal < -1e-6 ? '#e74c3c' : '#27ae60';
         cellContent += `<div style="position:absolute;bottom:2px;left:4px;font-size:10px;color:${evalColor};">${evalVal.toFixed(2)}</div>`;
       }
-      
-      solutionHtml += `<td style="position:relative;width:80px;height:50px;text-align:center;vertical-align:middle;${x > 0 ? 'background:#e8f4fd;' : ''}">${cellContent}</td>`;
+
+      const bgColor = x > 0 ? 'background:#e8f4fd;' : '';
+      solutionHtml += `<td style="position:relative;width:80px;height:50px;text-align:center;vertical-align:middle;${bgColor}">${cellContent}</td>`;
     }
     solutionHtml += `<td style="font-weight:bold;">${this.supply[i]}</td></tr>`;
   }
@@ -400,16 +369,55 @@ TransportLab.renderSolutionTable = function () {
     solutionHtml += `<td style="font-weight:bold;">${this.demand[j]}</td>`;
   }
   solutionHtml += '<td></td></tr>';
-
   solutionHtml += '</table>';
+  solutionHtml += '</div>';
+
+  return solutionHtml;
+};
+
+TransportLab.addSolutionTable = function(stepDescription) {
+  const tableHtml = this.renderSolutionTable();
+  const stepData = {
+    iteration: this.iteration,
+    description: stepDescription,
+    table: tableHtml,
+    fValue: this.currentF,
+    pivot: this.currentPivot,
+    cycle: this.cycleMarks
+  };
+  this.solutionTables.push(stepData);
+};
+
+TransportLab.displayAllSolutionTables = function() {
+  let allHtml = '<h3>Ход решения (все таблицы):</h3>';
   
-  document.getElementById('solution-table-container').innerHTML = solutionHtml;
+  for (let i = 0; i < this.solutionTables.length; i++) {
+    const step = this.solutionTables[i];
+    allHtml += `<div class="solution-step">`;
+    allHtml += `<h4>Шаг ${step.iteration}: ${step.description}</h4>`;
+    allHtml += `<p>Целевая функция F = ${step.fValue}</p>`;
+    allHtml += step.table;
+    
+    if (step.pivot) {
+      allHtml += `<p style="margin-top:10px; font-style:italic;">`;
+      allHtml += `Вводимая клетка: A${step.pivot.i + 1}B${step.pivot.j + 1}`;
+      if (step.pivot.eval !== undefined) {
+        allHtml += ` (оценка: ${step.pivot.eval.toFixed(3)})`;
+      }
+      allHtml += `</p>`;
+    }
+    
+    allHtml += `<hr style="margin:30px 0; border:1px dashed #ccc;">`;
+    allHtml += `</div>`;
+  }
+  
+  document.getElementById('solution-table-container').innerHTML = allHtml;
 };
 
 TransportLab.logStep = function (text) {
   this.stepLog.push(`Итерация ${this.iteration}: ${text}`);
   const logEl = document.getElementById('transport-steps');
-  logEl.innerHTML = '<h4>Ход решения:</h4>' + this.stepLog.map(s => `<div style="margin:5px 0;padding:5px;border-bottom:1px solid #eee;">${s}</div>`).join('');
+  logEl.innerHTML = '<h4>Ход решения (логи):</h4>' + this.stepLog.map(s => `<div style="margin:5px 0;padding:5px;border-bottom:1px solid #eee;">${s}</div>`).join('');
   logEl.scrollTop = logEl.scrollHeight;
 };
 
@@ -428,10 +436,9 @@ TransportLab.calculatePotentials = function () {
   const n = this.n;
   this.potentials.u = Array(m).fill(null);
   this.potentials.v = Array(n).fill(null);
-
   this.potentials.u[0] = 0;
   let changed = true;
-  const maxIter = m * n * 2;
+  const maxIter = (m + n) * 5;
 
   for (let iter = 0; iter < maxIter && changed; iter++) {
     changed = false;
@@ -450,74 +457,67 @@ TransportLab.calculatePotentials = function () {
     }
   }
 
-  return this.potentials.u.every(u => u !== null) || this.potentials.v.every(v => v !== null);
+  for (let i = 0; i < m; i++) if (this.potentials.u[i] === null) this.potentials.u[i] = 0;
+  for (let j = 0; j < n; j++) if (this.potentials.v[j] === null) this.potentials.v[j] = 0;
 };
 
 TransportLab.calculateEvaluations = function() {
   const m = this.m;
   const n = this.n;
   this.evaluations = Array(m).fill().map(() => Array(n).fill(0));
-  
   let minEval = Infinity;
   let pivotCell = null;
-  
   for (let i = 0; i < m; i++) {
     for (let j = 0; j < n; j++) {
       if (this.plan[i][j] === 0) {
         const evalVal = this.costs[i][j] - (this.potentials.u[i] || 0) - (this.potentials.v[j] || 0);
         this.evaluations[i][j] = Math.round(evalVal * 1000) / 1000;
-        
         if (this.evaluations[i][j] < minEval) {
           minEval = this.evaluations[i][j];
-          pivotCell = {i, j, eval: this.evaluations[i][j]};
+          pivotCell = { i, j, eval: this.evaluations[i][j] };
         }
       }
     }
   }
-  
-  return {minEval, pivotCell};
+  return { minEval, pivotCell };
 };
 
 TransportLab.findCycle = function(startI, startJ) {
   const m = this.m;
   const n = this.n;
-  
-  const visited = Array(m).fill().map(() => Array(n).fill(false));
   const path = [];
-  
-  const dfs = (i, j, fromRow) => {
-    if (i === startI && j === startJ && path.length > 0) {
-      if (path.length % 2 === 0) return true;
-      return false;
-    }
-    
+  const visited = Array(m).fill().map(() => Array(n).fill(false));
+
+  const dfs = (i, j, isRowMove, depth) => {
+    if (depth > m * n) return false;
+    if (i === startI && j === startJ && path.length >= 4 && path.length % 2 === 0) return true;
     if (visited[i][j]) return false;
+
     visited[i][j] = true;
     path.push([i, j]);
-    
-    if (fromRow) {
+
+    if (isRowMove) {
       for (let nj = 0; nj < n; nj++) {
         if (nj !== j && (this.plan[i][nj] > 0 || (i === startI && nj === startJ))) {
-          if (dfs(i, nj, false)) return true;
+          if (dfs(i, nj, false, depth + 1)) return true;
         }
       }
     } else {
       for (let ni = 0; ni < m; ni++) {
         if (ni !== i && (this.plan[ni][j] > 0 || (ni === startI && j === startJ))) {
-          if (dfs(ni, j, true)) return true;
+          if (dfs(ni, j, true, depth + 1)) return true;
         }
       }
     }
-    
+
     path.pop();
     visited[i][j] = false;
     return false;
   };
-  
-  if (dfs(startI, startJ, true)) {
-    return path;
+
+  if (dfs(startI, startJ, true, 0)) {
+    return [...path];
   }
-  
   return null;
 };
 
@@ -526,7 +526,6 @@ TransportLab.solveStep = function () {
     alert('Сначала создайте начальный план!');
     return;
   }
-
   if (this.isOptimal) {
     alert('План уже оптимален!');
     return;
@@ -535,62 +534,58 @@ TransportLab.solveStep = function () {
   this.iteration++;
   this.cycleMarks = [];
   this.currentPivot = null;
-  
-  if (!this.calculatePotentials()) {
-    this.logStep('Не удалось найти потенциалы (вырожденный план).');
-    return;
-  }
 
   const evalResult = this.calculateEvaluations();
-  this.renderSolutionTable();
-  
-  this.logStep(`Потенциалы вычислены. Минимальная оценка: ${evalResult.minEval.toFixed(3)}`);
   
   if (evalResult.minEval >= -1e-6) {
     this.isOptimal = true;
+    this.addSolutionTable('Оптимальное решение');
+    this.displayAllSolutionTables();
     this.showResult();
+    this.logStep('План оптимален: все оценки ≥ 0.');
     return;
   }
-  
+
   this.currentPivot = evalResult.pivotCell;
-  this.logStep(`Вводим клетку (${this.currentPivot.i+1}, ${this.currentPivot.j+1}) с оценкой ${this.currentPivot.eval.toFixed(3)}`);
+  this.logStep(`Вводим клетку (${this.currentPivot.i + 1}, ${this.currentPivot.j + 1}) с оценкой ${this.currentPivot.eval.toFixed(3)}`);
   
+  // Добавляем таблицу перед вводом новой клетки
+  this.addSolutionTable(`Перед вводом клетки A${this.currentPivot.i + 1}B${this.currentPivot.j + 1}`);
+
   const cycle = this.findCycle(this.currentPivot.i, this.currentPivot.j);
   if (!cycle || cycle.length < 4) {
-    this.logStep('Ошибка: не удалось найти цикл пересчёта.');
+    this.logStep('Ошибка: не удалось найти контур.');
     return;
   }
-  
+
+  this.logStep(`Контур найден.`);
   for (let k = 0; k < cycle.length; k++) {
     const [i, j] = cycle[k];
-    this.cycleMarks.push({i, j, sign: k % 2 === 0 ? 1 : -1});
+    this.cycleMarks.push({ i, j, sign: k % 2 === 0 ? 1 : -1 });
   }
-  
-  this.renderSolutionTable();
-  
+
   let theta = Infinity;
   for (let k = 1; k < cycle.length; k += 2) {
     const [i, j] = cycle[k];
     theta = Math.min(theta, this.plan[i][j]);
   }
-  
-  this.logStep(`θ = ${theta} (находится в клетке со знаком "-")`);
-  
+  this.logStep(`θ = ${theta}`);
+
   for (let k = 0; k < cycle.length; k++) {
     const [i, j] = cycle[k];
-    if (k % 2 === 0) {
-      this.plan[i][j] += theta;
-    } else {
-      this.plan[i][j] -= theta;
-    }
+    if (k % 2 === 0) this.plan[i][j] += theta;
+    else this.plan[i][j] -= theta;
   }
-  
+
   this.cleanZeroBasis();
   this.calculateCurrentF();
-  
   this.logStep(`План скорректирован. Новое значение F = ${this.currentF}`);
   
-  this.renderSolutionTable();
+  // Добавляем таблицу после корректировки
+  this.addSolutionTable(`После перераспределения по контуру (θ=${theta})`);
+  
+  // Отображаем все таблицы
+  this.displayAllSolutionTables();
 };
 
 TransportLab.solveAll = function() {
@@ -599,18 +594,69 @@ TransportLab.solveAll = function() {
     return;
   }
   
-  let maxIterations = 50;
-  let iter = 0;
+  // Сбрасываем таблицы решений
+  this.solutionTables = [];
+  this.addSolutionTable('Начальный опорный план');
   
-  while (!this.isOptimal && iter < maxIterations) {
-    this.solveStep();
-    iter++;
+  let maxIterations = 50;
+  while (!this.isOptimal && maxIterations-- > 0) {
+    const prevF = this.currentF;
+    const prevIter = this.iteration;
     
-    if (this.isOptimal) break;
+    this.iteration++;
+    this.cycleMarks = [];
+    this.currentPivot = null;
+
+    const evalResult = this.calculateEvaluations();
+    
+    if (evalResult.minEval >= -1e-6) {
+      this.isOptimal = true;
+      this.addSolutionTable('Оптимальное решение');
+      break;
+    }
+
+    this.currentPivot = evalResult.pivotCell;
+    this.addSolutionTable(`Итерация ${this.iteration}: перед вводом клетки A${this.currentPivot.i + 1}B${this.currentPivot.j + 1}`);
+
+    const cycle = this.findCycle(this.currentPivot.i, this.currentPivot.j);
+    if (!cycle || cycle.length < 4) {
+      this.logStep('Ошибка: не удалось найти контур.');
+      break;
+    }
+
+    for (let k = 0; k < cycle.length; k++) {
+      const [i, j] = cycle[k];
+      this.cycleMarks.push({ i, j, sign: k % 2 === 0 ? 1 : -1 });
+    }
+
+    let theta = Infinity;
+    for (let k = 1; k < cycle.length; k += 2) {
+      const [i, j] = cycle[k];
+      theta = Math.min(theta, this.plan[i][j]);
+    }
+
+    for (let k = 0; k < cycle.length; k++) {
+      const [i, j] = cycle[k];
+      if (k % 2 === 0) this.plan[i][j] += theta;
+      else this.plan[i][j] -= theta;
+    }
+
+    this.cleanZeroBasis();
+    this.calculateCurrentF();
+    
+    if (Math.abs(this.currentF - prevF) < 1e-6 && this.iteration > prevIter) {
+      this.logStep('Решение не улучшается. Возможно, достигнуто оптимальное решение.');
+      break;
+    }
   }
   
   if (!this.isOptimal) {
-    this.logStep(`Достигнуто максимальное количество итераций (${maxIterations})`);
+    this.logStep('Достигнуто максимальное число итераций.');
+  }
+  
+  this.displayAllSolutionTables();
+  if (this.isOptimal) {
+    this.showResult();
   }
 };
 
@@ -618,46 +664,35 @@ TransportLab.cleanZeroBasis = function () {
   const m = this.m;
   const n = this.n;
   const maxBasis = m + n - 1;
-  
-  let basisCount = 0;
+  let basis = [];
   for (let i = 0; i < m; i++) {
     for (let j = 0; j < n; j++) {
-      if (this.plan[i][j] > 0) basisCount++;
+      if (this.plan[i][j] > 1e-6) basis.push([i, j]);
     }
   }
-  
-  if (basisCount <= maxBasis) return;
-  
-  for (let i = 0; i < m; i++) {
-    for (let j = 0; j < n; j++) {
-      if (this.plan[i][j] === 0 && basisCount > maxBasis) {
-        this.plan[i][j] = -1;
-        basisCount--;
-      }
-    }
+  if (basis.length <= maxBasis) return;
+  const extra = basis.length - maxBasis;
+  for (let idx = basis.length - extra; idx < basis.length; idx++) {
+    const [i, j] = basis[idx];
+    this.plan[i][j] = 0;
   }
 };
 
 TransportLab.showResult = function() {
   const savings = this.initialF > 0 ? ((this.initialF - this.currentF) / this.initialF * 100).toFixed(2) : '0';
-  
   let resultHtml = `
     <div class="result-box">
       <h3>✅ Решение найдено!</h3>
-      <p><strong>Оптимальные затраты (F<sub>опт</sub>)</strong>: ${this.currentF.toFixed(2)}</p>
-      <p><strong>Начальные затраты</strong>: ${this.initialF.toFixed(2)}</p>
+      <p><strong>Оптимальные затраты (F<sub>опт</sub>)</strong>: ${this.currentF}</p>
+      <p><strong>Начальные затраты</strong>: ${this.initialF}</p>
       <p><strong>Экономия</strong>: ${savings}%</p>
       <p><strong>Количество итераций</strong>: ${this.iteration}</p>
       <hr>
       <h4>Оптимальный план перевозок:</h4>
       <table border="1" cellpadding="5" cellspacing="0" style="width:100%;">
         <tr><th></th>`;
-  
-  for (let j = 0; j < this.n; j++) {
-    resultHtml += `<th>B${j+1}</th>`;
-  }
+  for (let j = 0; j < this.n; j++) resultHtml += `<th>B${j+1}</th>`;
   resultHtml += `</tr>`;
-  
   for (let i = 0; i < this.m; i++) {
     resultHtml += `<tr><td>A${i+1}</td>`;
     for (let j = 0; j < this.n; j++) {
@@ -669,9 +704,7 @@ TransportLab.showResult = function() {
     }
     resultHtml += `</tr>`;
   }
-  
   resultHtml += `</table></div>`;
-  
   document.getElementById('result-container').innerHTML = resultHtml;
 };
 
@@ -691,6 +724,7 @@ TransportLab.resetState = function() {
   this.cycleMarks = [];
   this.evaluations = [];
   this.isOptimal = false;
+  this.solutionTables = [];
 };
 
 TransportLab.reset = function () {
@@ -706,120 +740,64 @@ function initLab4() {
   const style = document.createElement('style');
   style.textContent = `
     .input-table {
-      margin: 20px 0;
-      border-collapse: collapse;
-      width: 100%;
-      max-width: 1200px;
+      margin: 20px 0; border-collapse: collapse; width: 100%; max-width: 1200px;
     }
     .input-table th, .input-table td {
-      padding: 8px;
-      text-align: center;
-      border: 1px solid #ddd;
+      padding: 8px; text-align: center; border: 1px solid #ddd;
     }
     .input-table th {
-      background-color: #f8f9fa;
-      font-weight: bold;
+      background-color: #f8f9fa; font-weight: bold;
     }
     .input-table input {
-      width: 60px;
-      padding: 4px;
-      text-align: center;
-      border: 1px solid #ccc;
-      border-radius: 3px;
+      width: 60px; padding: 4px; text-align: center; border: 1px solid #ccc; border-radius: 3px;
+    }
+    .solution-table-container {
+      margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 4px; border: 1px solid #ddd;
     }
     .solution-table {
-      margin: 20px 0;
-      border-collapse: collapse;
-      width: 100%;
-      max-width: 1200px;
+      margin: 10px 0; border-collapse: collapse; width: 100%; max-width: 1200px;
     }
     .solution-table th, .solution-table td {
-      padding: 8px;
-      text-align: center;
-      min-width: 80px;
-      border: 1px solid #ddd;
+      padding: 8px; text-align: center; min-width: 80px; border: 1px solid #ddd;
     }
     .solution-table th {
-      background-color: #f8f9fa;
-      font-weight: bold;
+      background-color: #f8f9fa; font-weight: bold;
     }
     .solution-table td {
-      position: relative;
-      height: 50px;
+      position: relative; height: 50px;
     }
-    .basis-cell {
-      background-color: #e8f4fd !important;
+    .solution-step {
+      margin-bottom: 40px; padding-bottom: 20px; border-bottom: 2px solid #3498db;
     }
     #transport-steps {
-      margin: 20px 0;
-      padding: 15px;
-      background: #f8f9fa;
-      border-radius: 4px;
-      min-height: 100px;
-      max-height: 400px;
-      overflow-y: auto;
-      border: 1px solid #ddd;
+      margin: 20px 0; padding: 15px; background: #f8f9fa; border-radius: 4px;
+      min-height: 100px; max-height: 400px; overflow-y: auto; border: 1px solid #ddd;
       line-height: 1.5;
     }
     .controls {
-      margin: 20px 0;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
+      margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap;
     }
     .action {
-      padding: 8px 16px;
-      background-color: #3498db;
-      color: white;
-      border: none;
-      border-radius: 4px;
-      cursor: pointer;
-      margin: 5px 0;
-      transition: background 0.2s;
+      padding: 8px 16px; background-color: #3498db; color: white; border: none;
+      border-radius: 4px; cursor: pointer; margin: 5px 0; transition: background 0.2s;
     }
-    .action:hover {
-      background-color: #2980b9;
-    }
-    .action:active {
-      transform: translateY(1px);
-    }
+    .action:hover { background-color: #2980b9; }
+    .action:active { transform: translateY(1px); }
     .result-box {
-      margin: 20px 0;
-      padding: 20px;
-      background: #e8f5e8;
-      border-radius: 8px;
+      margin: 20px 0; padding: 20px; background: #e8f5e8; border-radius: 8px;
       border: 1px solid #4caf50;
     }
-    .result-box h3 {
-      color: #2e7d32;
-      margin-top: 0;
-    }
-    .result-box table {
-      margin: 10px 0;
-      border-collapse: collapse;
-      width: 100%;
-    }
+    .result-box h3 { color: #2e7d32; margin-top: 0; }
+    .result-box table { margin: 10px 0; border-collapse: collapse; width: 100%; }
     .result-box table th, .result-box table td {
-      border: 1px solid #bdc3c7;
-      padding: 6px;
-      text-align: center;
+      border: 1px solid #bdc3c7; padding: 6px; text-align: center;
     }
-    h2, h3, h4 {
-      color: #2c3e50;
-    }
+    h2, h3, h4 { color: #2c3e50; }
     .input-group {
-      margin: 15px 0;
-      padding: 10px;
-      background: #f0f7ff;
-      border-radius: 4px;
+      margin: 15px 0; padding: 10px; background: #f0f7ff; border-radius: 4px;
     }
-    .input-group label {
-      margin-right: 5px;
-      font-weight: bold;
-    }
-    .input-group input {
-      margin-right: 15px;
-    }
+    .input-group label { margin-right: 5px; font-weight: bold; }
+    .input-group input { margin-right: 15px; }
   `;
   document.head.appendChild(style);
 }
